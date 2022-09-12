@@ -29,6 +29,11 @@ tor_t create_tor(int16_t tor_index)
     for (int i = 0; i < TOR_DOWNSTREAM_BUFFER_LEN+1; ++i) {
         self->queue_stat.downstream_queue_len_histogram[i] = 0;
     }
+    
+    if(create_routing_table(self->routing_table) != RTABLE_SIZE) {
+        printf("ERROR!! Routing table poorly initialized.");
+    }
+    
 
     return self;
 }

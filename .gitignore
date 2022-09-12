@@ -1,3 +1,4 @@
 simulation/bin
 simulation/obj
 simulation/*.har
+simulation/trace*

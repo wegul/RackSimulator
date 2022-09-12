@@ -37,7 +37,8 @@ OBJ = $(OBJDIR)/bounded_buffer.o \
       $(OBJDIR)/flow_patterns.o \
       $(OBJDIR)/system_stats.o \
       $(OBJDIR)/host_flow_queue_add_remove.o \
-      $(OBJDIR)/prepare_host_packet.o
+      $(OBJDIR)/prepare_host_packet.o \
+      $(OBJDIR)/routing_table.o
 
 default: all
 

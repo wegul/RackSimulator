@@ -4,6 +4,7 @@
 #include "params.h"
 #include "bounded_buffer.h"
 #include "packet.h"
+#include "routing_table.h"
 
 typedef struct {
     int64_t upstream_queue_len_histogram[TOR_UPSTREAM_BUFFER_LEN+1];
@@ -35,6 +36,8 @@ struct tor {
     int16_t temp_new_flow_src_id[NOTF_SIZE];
     int16_t temp_new_flow_dst_id[NOTF_SIZE];
     int8_t temp_flow_start[NOTF_SIZE];
+
+    rnode_t routing_table[RTABLE_SIZE];
 
     tor_queue_stats_t queue_stat;
 };
