@@ -119,14 +119,6 @@ void extract_flow_notification(tor_t tor, packet_t pkt)
         if (pkt->dst_node >= tor->tor_index*NODES_PER_RACK
             && pkt->dst_node < tor->tor_index*NODES_PER_RACK + NODES_PER_RACK) {
             int16_t dst_within_tor = pkt->dst_node % NODES_PER_RACK;
-            //if (tor->tor_index == 2 && dst_within_tor == 3) {
-            //    printf("[%ld/%ld] Adding <%d,%d> from spine %d, count = %d\n",
-            //            curr_timeslot, curr_epoch, pkt->src_node, pkt->dst_node,
-            //            pkt->data_spine_id, bounded_buffer_num_of_elements(tor->downstream_pkt_buffer[dst_within_tor])+1);
-            //}
-            //if (bounded_buffer_num_of_elements(tor->downstream_pkt_buffer[dst_within_tor]) >= TOR_DOWNSTREAM_BUFFER_LEN) {
-            //    printf("ToR = %d buffer = %d\n", tor->tor_index, dst_within_tor);
-            //}
             assert(bounded_buffer_num_of_elements
                 (tor->downstream_pkt_buffer[dst_within_tor])
                     < TOR_DOWNSTREAM_BUFFER_LEN);

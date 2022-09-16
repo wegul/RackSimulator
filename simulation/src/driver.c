@@ -207,37 +207,6 @@ void work_per_timeslot()
             pkt->time_to_dequeue_from_link = curr_timeslot +
                 per_hop_propagation_delay_in_timeslots;
             link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-            //if (pkt->dst_node != -1 && pkt->data_spine_id==0 && pkt->src_node==92) {
-            //    printf("[%ld/%ld] SENT PKT (%d,%d,%d--%ld)\n",
-            //            curr_timeslot, curr_epoch, pkt->data_spine_id,
-            //            pkt->src_node, pkt->dst_node, pkt->seq_num);
-            //}
-            //    assert(pkt->data_spine_id != -1);
-            //    int s = pkt->data_spine_id;
-            //    int d = pkt->dst_node;
-            //    node->time_last_pkt_sent[s][d][2]
-            //        = node->time_last_pkt_sent[s][d][1];
-            //    node->time_last_pkt_sent[s][d][1]
-            //        = node->time_last_pkt_sent[s][d][0];
-            //    node->time_last_pkt_sent[s][d][0]
-            //        = curr_timeslot;
-            //    if (node->time_last_pkt_sent[s][d][2] != -1) {
-            //        if (node->time_last_pkt_sent[s][d][0]
-            //            - node->time_last_pkt_sent[s][d][2] < epoch_len) {
-            //            printf("(s=%d src=%d d=%d) %d/%d %d/%d %d/%d\n", s,
-            //                    node->node_index, d,
-            //                    node->time_last_pkt_sent[s][d][0],
-            //                    node->time_last_pkt_sent[s][d][0]/epoch_len,
-            //                    node->time_last_pkt_sent[s][d][1],
-            //                    node->time_last_pkt_sent[s][d][1]/epoch_len,
-            //                    node->time_last_pkt_sent[s][d][2],
-            //                    node->time_last_pkt_sent[s][d][2]/epoch_len);
-            //        }
-            //        assert(node->time_last_pkt_sent[s][d][0]
-            //            - node->time_last_pkt_sent[s][d][2]
-            //            >= epoch_len);
-            //    }
-            //}
         }
 
 /*---------------------------------------------------------------------------*/
@@ -279,10 +248,6 @@ void work_per_timeslot()
                 pkt->time_to_dequeue_from_link = curr_timeslot +
                     per_hop_propagation_delay_in_timeslots;
                 link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
-                //if (tor->tor_index == 2 && pkt->dst_node == 35) {
-                //    printf("[%ld/%ld] *********** TRANSMITTING <%d, %d> ************ %d\n",
-                //            curr_timeslot, curr_epoch, pkt->src_node, pkt->dst_node, bounded_buffer_num_of_elements(tor->downstream_pkt_buffer[3]));
-                //}
             }
         }
 
@@ -406,12 +371,6 @@ void work_per_timeslot()
                             malloc(sizeof(struct recvd_pull_request));
                         recvd_pull_req[k]->spine_id = pkt->notf_spine_id;
                         recvd_pull_req[k]->destination_id = pkt->new_flow_src_id[0];
-                        //if (pkt->notf_spine_id == 0) {
-                        //    printf("[%ld/%ld] RECVD PULL REQ (%d,%d,%d--%d>\n",
-                        //        curr_timeslot, curr_epoch, pkt->notf_spine_id,
-                        //        node->node_index, pkt->new_flow_src_id[0],
-                        //        pkt->seq_num);
-                        //}
                         assert(bounded_buffer_num_of_elements
                             (node->recvd_pull_req_queue)<RECVD_PULL_REQ_QUEUE_LEN);
                         assert(bounded_buffer_put
