@@ -236,7 +236,7 @@ void work_per_timeslot()
                 packet_t pkt = send_to_spine(tor, tor_port);
                 assert(pkt != NULL);
                 pkt->time_to_dequeue_from_link = curr_timeslot +
-                    per_hop_propagation_delay_in_timeslots;
+                    per_hop_propagation_delay_in_timeslots; 
                 link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
             }
 

@@ -1,5 +1,7 @@
 #include "routing_table.h"
+#include "params.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 int create_routing_table(rnode_t * routing_table) {
     int i;
@@ -9,6 +11,10 @@ int create_routing_table(rnode_t * routing_table) {
     return i;
 }
 
-int hash(int key) {
-    return key % RTABLE_SIZE;
+int hash(rnode_t * routing_table, int key) {
+    if (routing_table[key % RTABLE_SIZE].port == -1) {
+        int spine = rand() % NUM_OF_SPINES;
+        routing_table[key % RTABLE_SIZE].port = spine;
+    }
+    return routing_table[key % RTABLE_SIZE].port;
 }

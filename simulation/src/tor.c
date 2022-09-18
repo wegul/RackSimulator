@@ -128,8 +128,10 @@ void extract_flow_notification(tor_t tor, packet_t pkt)
             assert(bounded_buffer_num_of_elements
                 (tor->upstream_pkt_buffer[pkt->data_spine_id])
                     < TOR_UPSTREAM_BUFFER_LEN);
+            int spine_id = hash(tor->routing_table, pkt->flow_id);
             assert(bounded_buffer_put
-                (tor->upstream_pkt_buffer[pkt->data_spine_id], pkt) != -1);
+                (tor->upstream_pkt_buffer[spine_id], pkt) != -1);
+            pkt->data_spine_id = spine_id;
         }
         clear_protocol_fields(pkt);
     } else {

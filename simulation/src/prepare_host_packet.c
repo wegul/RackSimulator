@@ -122,7 +122,7 @@ packet_t get_host_packet(node_t host_node)
 
         pkt = prepare_packet(host_node, recvd_pull_req->destination_id);
         if (pkt != NULL) {
-            pkt->data_spine_id = recvd_pull_req->spine_id;
+            pkt->data_spine_id = -2;
         }
 
         free(recvd_pull_req);

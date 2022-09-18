@@ -12,6 +12,6 @@ typedef struct rnode {
 } rnode_t;
 
 int create_routing_table(rnode_t * routing_table);
-int hash(int key);
+int hash(rnode_t * routing_table, int key);
 
 #endif
