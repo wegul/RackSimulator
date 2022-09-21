@@ -1,4 +1,6 @@
+old_simulation/bin
+old_simulation/obj
+old_simulation/trace*
 simulation/bin
 simulation/obj
-simulation/*.har
 simulation/trace*

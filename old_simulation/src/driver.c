@@ -1,6 +1,7 @@
 #include "params.h"
 #include "arraylist.h"
 #include "bounded_buffer.h"
+#include "min_priority_queue.h"
 #include "link.h"
 #include "flow.h"
 #include "packet.h"
@@ -9,7 +10,9 @@
 #include "spine.h"
 #include "links.h"
 #include "flow_patterns.h"
+#include "host_flow_queue_add_remove.h"
 #include "prepare_host_packet.h"
+#include "system_stats.h"
 
 // Default values for simulation
 static int pkt_size = 64; //in bytes
@@ -171,7 +174,7 @@ void work_per_timeslot()
             for (int k = 0; k < SPINE_PORT_COUNT; ++k) {
                 int16_t dst_node = source_list[spine_index][j][k];
                 int16_t dst_tor = dst_node / NODES_PER_RACK;
-                packet_t pkt = send_to_tor
+                packet_t pkt = pkt_to_send_from_spine_port
                     (spine, dst_node, dst_tor);
                 pkt->time_to_dequeue_from_link = curr_timeslot +
                     per_hop_propagation_delay_in_timeslots;
