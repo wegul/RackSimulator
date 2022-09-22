@@ -10,8 +10,7 @@
 struct spine {
     int16_t spine_index;
     //packet storage datastructure
-    bounded_buffer_t recv_buffer[NUM_OF_TORS];
-    bounded_buffer_t send_buffer[NUM_OF_TORS];
+    bounded_buffer_t pkt_buffer[NUM_OF_TORS];
 };
 typedef struct spine* spine_t;
 

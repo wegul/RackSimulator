@@ -12,10 +12,6 @@ node_t create_node(int16_t node_index)
         self->dst_flows[i] = create_dst_flow(i, node_index);
     }
 
-    self->flow_notification_buffer = create_bounded_buffer(NUM_OF_NODES);
-
-    self->recvd_pull_req_queue = create_bounded_buffer(RECVD_PULL_REQ_QUEUE_LEN);
-
     self->num_of_active_host_flows = 0;
     self->num_of_active_network_host_flows = 0;
     self->curr_num_of_sending_nodes = 0;
@@ -55,10 +51,6 @@ void free_node(node_t self)
             free_dst_flow(self->dst_flows[i]);
             free_arraylist(self->re_order_buffer[i]);
         }
-
-        free_bounded_buffer(self->flow_notification_buffer);
-
-        free_bounded_buffer(self->recvd_pull_req_queue);
 
         free_arraylist(self->stat.flow_stat_list);
 
