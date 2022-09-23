@@ -30,12 +30,10 @@ void free_tor(tor_t self)
 
         for (int i = 0; i < NODES_PER_RACK; ++i) {
             free_bounded_buffer(self->downstream_pkt_buffer[i]);
-            free_bounded_buffer(self->pull_req_queue[i]);
         }
 
         for (int i = 0; i < NUM_OF_SPINES; ++i) {
             free_bounded_buffer(self->upstream_pkt_buffer[i]);
-            free_bounded_buffer(self->flow_notification_queue[i]);
         }
 
         free(self);
@@ -47,7 +45,6 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id)
     packet_t pkt = (packet_t) bounded_buffer_get(tor->upstream_pkt_buffer[spine_id]);
     if (pkt == NULL) {
         pkt = create_packet(-1, -1, -1, -1);
-        clear_protocol_fields(pkt);
     } else {
         pkt->spine_id = spine_id;
     }
@@ -61,7 +58,6 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor)
         bounded_buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
     if (pkt == NULL) {
         pkt = create_packet(-1, -1, -1, -1);
-        clear_protocol_fields(pkt);
     }
 
     return pkt;

@@ -9,7 +9,6 @@
 #include "spine.h"
 #include "links.h"
 #include "flow_patterns.h"
-#include "prepare_host_packet.h"
 
 // Default values for simulation
 static int pkt_size = 64; //in bytes
@@ -149,7 +148,7 @@ void work_per_timeslot()
 
             add_host_flows(node);
 
-            packet_t pkt = get_host_packet(node);
+            packet_t pkt = create_packet(1, 2, 1, 0);
 
             int16_t dst_tor = node_index / NODES_PER_RACK;
             pkt->time_to_dequeue_from_link = curr_timeslot +
@@ -239,14 +238,11 @@ void work_per_timeslot()
                     pkt = (packet_t) link_dequeue
                         (links->tor_to_spine_link[src_tor][spine_index]);
 
-                    spine_ingress_processing(spine, pkt);
-
                     //enq packet in the virtual queue
                     int16_t dst_host = pkt->dst_node;
                     if (dst_host != -1) {
                         assert(bounded_buffer_put(spine->pkt_buffer[dst_host], pkt)                                                                                                                                                                                                                                        
                                 != -1);
-                        clear_protocol_fields(pkt);
                         //if first pkt in virtual q, insert in rr queue
                         if (bounded_buffer_num_of_elements
                             (spine->pkt_buffer[dst_host]) == 1) {
@@ -514,16 +510,6 @@ int main(int argc, char** argv)
     add_host_flows = func;
 
     work_per_timeslot();
-
-    print_summary_stats(pkt_size,
-                    header_overhead,
-                    link_bandwidth,
-                    timeslot_len,
-                    per_hop_propagation_delay_in_timeslots,
-                    time_to_start_logging,
-                    static_workload,
-                    run_till_max_epoch,
-                    out);
 
     //free nodes
     for (int i = 0; i < NUM_OF_NODES; ++i) {

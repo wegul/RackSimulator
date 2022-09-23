@@ -137,14 +137,6 @@ void tracefile(node_t node)
                 f->active = 1;
                 f->pkt_transmitted = 0;
                 f->pkt_received = 0;
-#ifdef DEBUG_FLOWPATTERNS
-                if (node->node_index == 9 && f->dst == 73) {
-                    printf("[%ld/%ld] Flow (%d->%d) started, size = %ld\n",
-                            curr_timeslot, curr_epoch,
-                            node->node_index, f->dst, f->flow_size);
-                }
-#endif
-                add_flow_start_to_flow_notf_buffer(node, f->dst);
 
                 ++(node->num_of_active_network_host_flows);
 
@@ -163,14 +155,6 @@ void tracefile(node_t node)
 
             } else {
                 f->flow_size += flow_list[i].flow_size;
-#ifdef DEBUG_FLOWPATTERNS
-                if (node->node_index == 9 && f->dst == 73) {
-                    printf("[%ld/%ld] Flow (%d->%d) started, size = %ld\n",
-                            curr_timeslot, curr_epoch,
-                            node->node_index, f->dst, f->flow_size);
-                }
-#endif
-                add_flow_start_to_flow_notf_buffer(node, f->dst);
 
                 //if (flow_list[i].flow_size >= 18725) {
                     ++(nodes[dst_flow_index]->curr_num_of_sending_nodes);

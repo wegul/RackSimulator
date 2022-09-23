@@ -33,7 +33,6 @@ packet_t send_to_tor(spine_t spine, int16_t target_node, int16_t tor_num)
 
     if (pkt == NULL) {
         pkt = create_packet(-1, -1, -1, -1);
-        clear_protocol_fields(pkt);
     } else {
         pkt->spine_id = spine->spine_index;
     }
