@@ -143,7 +143,7 @@ void work_per_timeslot()
                 pkt->time_to_dequeue_from_link = curr_timeslot +
                     per_hop_propagation_delay_in_timeslots;
                 link_enqueue(links->spine_to_tor_link[spine_index][dst_tor], pkt);
-                printf("spine %d sent pkt to port %d\n", i, k);
+                //printf("spine %d sent pkt to port %d\n", i, k);
             }
         }
 
@@ -164,7 +164,7 @@ void work_per_timeslot()
             pkt->time_to_dequeue_from_link = curr_timeslot +
                 per_hop_propagation_delay_in_timeslots;
             link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-            printf("host %d created pkt\n", i);
+            //printf("host %d created pkt\n", i);
         }
 
 /*---------------------------------------------------------------------------*/
@@ -196,7 +196,7 @@ void work_per_timeslot()
                 pkt->time_to_dequeue_from_link = curr_timeslot +
                     per_hop_propagation_delay_in_timeslots; 
                 link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
-                printf("ToR %d sent pkt to spine %d\n", i, tor_port);
+                //printf("ToR %d sent pkt to spine %d\n", i, tor_port);
             }
 
             //send to each host
@@ -207,7 +207,7 @@ void work_per_timeslot()
                 pkt->time_to_dequeue_from_link = curr_timeslot +
                     per_hop_propagation_delay_in_timeslots;
                 link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
-                printf("ToR %d sent pkt to host %d\n", i, dst_host);
+                //printf("ToR %d sent pkt to host %d\n", i, dst_host);
             }
         }
 
@@ -230,7 +230,7 @@ void work_per_timeslot()
                     pkt = (packet_t)
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
                 }
-                printf("Tor %d recv pkt from host %d\n", i, tor_port);
+                //printf("Tor %d recv pkt from host %d\n", i, tor_port);
             }
 
             //Recv packet from spine
@@ -244,7 +244,7 @@ void work_per_timeslot()
                     pkt = (packet_t)
                         link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
                 }
-                printf("Tor %d recv pkt from spine %d\n", i, tor_port);
+                //printf("Tor %d recv pkt from spine %d\n", i, tor_port);
             }
         }
 
@@ -308,7 +308,8 @@ void work_per_timeslot()
                     update_stats_on_pkt_recv(node, pkt, static_workload, start_logging);
                 }
                 else {
-                    update_stats_on_pkt_recv(node, pkt, static_workload, start_logging);
+                    num_of_flows_finished++;
+
                     printf("miss: %d not %d\n", pkt->dst_node, node_index);
                 }
 
@@ -346,6 +347,9 @@ void work_per_timeslot()
 
         //stop after certain number of flows have finished
         if (num_of_flows_finished >= num_of_flows_to_finish) terminate1 = 1;
+        
+        printf("numx %d\n", num_of_flows_finished);
+        printf("num %d\n", num_of_flows_to_finish);
 
         //stop after certain number of flows have started
         if (total_flows_started >= num_of_flows_to_start) terminate2 = 1;

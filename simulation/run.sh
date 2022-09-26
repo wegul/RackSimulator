@@ -22,8 +22,8 @@ bandwidth=100
 pkt_size=64
 header_overhead=0 #in bytes
 prop_delay=0
-numflowsfinish=5000000
-numflowsstart=500000
+numflowsfinish=5000
+numflowsstart=5000
 
 while getopts "f:w:e:b:c:h:d:n:m:rpa" OPTION
 do
