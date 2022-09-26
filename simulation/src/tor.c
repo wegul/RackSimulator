@@ -18,6 +18,14 @@ tor_t create_tor(int16_t tor_index)
         self->upstream_pkt_buffer[i]
             = create_bounded_buffer(TOR_UPSTREAM_BUFFER_LEN);
     }
+
+    for (int i = 0; i < TOR_UPSTREAM_BUFFER_LEN+1; ++i) {
+        self->queue_stat.upstream_queue_len_histogram[i] = 0;
+    }
+
+    for (int i = 0; i < TOR_DOWNSTREAM_BUFFER_LEN+1; ++i) {
+        self->queue_stat.downstream_queue_len_histogram[i] = 0;
+    }
     
     create_routing_table(self->routing_table);
     

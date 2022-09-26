@@ -22,6 +22,7 @@ OBJ = $(OBJDIR)/bounded_buffer.o \
       $(OBJDIR)/packet.o \
       $(OBJDIR)/flow.o \
       $(OBJDIR)/flow_patterns.o \
+      $(OBJDIR)/system_stats.o \
       $(OBJDIR)/routing_table.o
 
 default: all

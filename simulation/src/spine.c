@@ -10,6 +10,11 @@ spine_t create_spine(int16_t spine_index)
     for (int i = 0; i < NUM_OF_TORS; ++i) {
         self->pkt_buffer[i] = create_bounded_buffer(SPINE_PORT_BUFFER_LEN);
     }
+
+    for (int i = 0; i < SPINE_PORT_BUFFER_LEN+1; ++i) {
+        self->queue_stat.queue_len_histogram[i] = 0;
+    }
+
     return self;
 }
 

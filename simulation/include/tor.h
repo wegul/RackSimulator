@@ -6,6 +6,11 @@
 #include "packet.h"
 #include "routing_table.h"
 
+typedef struct {
+    int64_t upstream_queue_len_histogram[TOR_UPSTREAM_BUFFER_LEN+1];
+    int64_t downstream_queue_len_histogram[TOR_DOWNSTREAM_BUFFER_LEN+1];
+} tor_queue_stats_t;
+
 struct tor {
     int16_t tor_index;
     bounded_buffer_t downstream_pkt_buffer[NODES_PER_RACK];
@@ -14,6 +19,8 @@ struct tor {
     int16_t start_pointer;
 
     rnode_t routing_table[RTABLE_SIZE];
+
+    tor_queue_stats_t queue_stat;
 };
 typedef struct tor* tor_t;
 

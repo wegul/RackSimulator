@@ -10,6 +10,10 @@ struct packet {
     int64_t app_id;
     int64_t spine_id;
 
+    int64_t time_when_added_to_spine_queue;
+    int64_t time_when_transmitted_from_src;
+    int64_t seq_num;
+
     int64_t time_to_dequeue_from_link; //simulating propagation delay
 };
 typedef struct packet* packet_t;
