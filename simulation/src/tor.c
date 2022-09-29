@@ -53,6 +53,7 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id)
     packet_t pkt = (packet_t) bounded_buffer_get(tor->upstream_pkt_buffer[spine_id]);
     if (pkt == NULL) {
         pkt = create_packet(-1, -1, -1, -1);
+        //printf("tor send spine\n");
     } else {
         pkt->spine_id = spine_id;
     }
@@ -66,6 +67,7 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor)
         bounded_buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
     if (pkt == NULL) {
         pkt = create_packet(-1, -1, -1, -1);
+        //printf("tor send host\n");
     }
 
     return pkt;

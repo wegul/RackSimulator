@@ -8,6 +8,7 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id,
     self->src_node = src_node;
     self->dst_node = dst_node;
     self->flow_id = flow_id;
+    self->seq_num = seq_num;
     return self;
 }
 
