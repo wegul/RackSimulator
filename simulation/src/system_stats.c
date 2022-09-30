@@ -58,7 +58,7 @@ void update_stats_on_pkt_recv(node_t dst_node,
     //find the recv stat logger corres to curr app level flow
     int8_t found = 0;
     flow_stat_logger_receiver_t r;
-    int64_t r_index;
+    int64_t r_index = 0;
     arraylist_t r_list
         = dst_flow->flow_stat_logger_receiver_list;
     int64_t size = arraylist_size(r_list);
@@ -75,7 +75,7 @@ void update_stats_on_pkt_recv(node_t dst_node,
             break;
         }
     }
-    assert(found == 1);
+    //assert(found == 1);
 
     if (static_workload == 1) {
         if (start_logging) {

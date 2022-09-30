@@ -46,8 +46,13 @@ int8_t bounded_buffer_put(bounded_buffer_t self, void* element)
         ++(self->head);
         return 0;
     } else {
-        printf("error: bounded buffer full!!!\n");
-        return(-1);
+        self->size *= 2;
+        self->buffer = (void**) realloc(self->buffer, self->size * sizeof(void*));
+
+        self->buffer[(self->head % self->size)] = element;
+        self->head = self->size / 2;
+        self->tail = 0;
+        return 0;
     }
 }
 
