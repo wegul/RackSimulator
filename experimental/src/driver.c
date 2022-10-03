@@ -251,81 +251,102 @@ void work_per_timeslot()
                 free_packet(pkt);
             }
         }
+
+/*---------------------------------------------------------------------------*/
+                 //Data logging and state updates before next iteration
+/*---------------------------------------------------------------------------*/
+
         curr_timeslot++;
         if (curr_timeslot > 5) {
             break;
         }
     }
+
+
 }
 
-// /*---------------------------------------------------------------------------*/
-//                 //Data logging and state updates before next iteration
-// /*---------------------------------------------------------------------------*/
+static inline void usage()
+{
+    printf("usage: ./<exec> -f <filename>\n");
+    printf("filename must be <500 char long\n");
+    exit(1);
+}
 
-//         //checking if there are any active flows
-//         int16_t finished = 1;
 
-//         for (int i = 0; i < NUM_OF_NODES; ++i) {
-//             if (nodes[i]->num_of_active_host_flows > 0) {
-//                 finished = 0;
-//                 break;
-//             }
-//         }
+void process_args(int argc, char ** argv) {
+    int opt;
+    char filename[500] = "";
+    char out_filename[500] = "";
 
-//         if (static_workload == 1) {
-//             if (time_to_start_logging == INT64_MAX) {
-//                 time_to_start_logging = curr_timeslot;
-//             }
+    while ((opt = getopt(argc, argv, "f:w:b:c:h:d:m:")) != -1) {
+        switch(opt) {
+            case 'w': 
+                static_workload = atoi(optarg);
+                if(static_workload == 0){
+                    printf("Running a non-static workload file!\n");
+                } else {
+                    printf("Running a static workload file!\n");
+                }
+                break;
+            case 'c': 
+                pkt_size = atoi(optarg);
+                printf("Running with a pkt size of: %dB\n", pkt_size);
+                break;
+            case 'b': 
+                link_bandwidth = atof(optarg);
+                printf("Running with a link bandwidth of: %fGbps\n", link_bandwidth);
+                break;
+            case 'h': 
+                header_overhead = atoi(optarg);
+                printf("Header overhead of: %dB\n", header_overhead);
+                break;
+            case 'd': 
+                per_hop_propagation_delay_in_ns = atof(optarg);
+                break;
+            case 'n': 
+                num_of_flows_to_finish = atoi(optarg);
+                printf("Stop experiment after %ld flows have finished\n", num_of_flows_to_finish);
+                break;
+            case 'm': 
+                num_of_flows_to_start = atoi(optarg);
+                printf("Stop experiment after %ld flows have started\n", num_of_flows_to_start);
+                break;
+            case 'f': 
+                if (strlen(optarg) < 500)
+                    strcpy(filename, optarg);
+                else
+                    usage();
+                break;
+            default:
+                printf("Wrong command line argument\n");
+                exit(1);
+        }
+    }
 
-//             if (curr_timeslot == time_to_start_logging) {
-//                 start_logging = 1;
-//                 printf("Started logging at epoch = %ld\n", curr_epoch);
-//                 fflush(stdout);
-//             }
-//         }
+    timeslot_len = (pkt_size * 8) / link_bandwidth;
+    printf("Running with a slot length of %fns\b", timeslot_len);
 
-//         if (finished && flow_trace_scanned_completely) terminate = 1;
+    per_hop_propogation_delay_in_timeslots = round((float)per_hop_propagation_delay_in_ns / (float)timeslot_len);
+    printf("Per hop propagation delay: %f ns (%d timeslots)\n",
+        per_hop_propagation_delay_in_ns, per_hop_propagation_delay_in_timeslots);
+    printf("\n");
 
-//         //stop after certain number of flows have finished
-//         if (num_of_flows_finished >= num_of_flows_to_finish) terminate1 = 1;
-        
-//         //printf("numx %d\n", num_of_flows_finished);
-//         //printf("num %d\n", num_of_flows_to_finish);
+    read_tracefile(filename);
+}
 
-//         //stop after certain number of flows have started
-//         if (total_flows_started >= num_of_flows_to_start) terminate2 = 1;
-
-//         ++curr_timeslot;
-//         if (curr_timeslot % epoch_len == 0) {
-//             ++curr_epoch;
-//             if (curr_epoch % 10 == 0) {
-//                 int count = 0;
-//                 int count1 = 0;
-//                 for (int j = 0; j < NUM_OF_NODES; ++j) {
-//                     count += nodes[j]->num_of_active_host_flows;
-//                 }
-//                 for (int j = 0; j < NUM_OF_NODES; ++j) {
-//                     count1 += nodes[j]->num_of_active_network_host_flows;
-//                 }
-//                 print_network_tput(pkt_size, header_overhead, timeslot_len);
-//             }
-//         }
-
-//         read_from_tracefile();
-
-//         if (run_till_max_epoch
-//         && curr_timeslot >= (max_epochs_to_run * epoch_len)) {
-//             terminate3 = 1;
-//         }
-
-//         //Terminate experiment
-//         if (terminate || terminate1 || terminate2 || terminate3) {
-//             return;
-//         }
-//     }
-// }
-
-void read_tracefile() {
+void read_tracefile(char * filename) {
+    int fd;
+    char * saved_ptr;
+    if (strcmp(filename, "")) {
+        fd = open(filename, O_RDONLY);
+        if (fd == -1) {
+            perror("open");
+            exit(1);
+        }
+        else {
+            
+        }
+    }
     return;
 }
 
@@ -400,7 +421,7 @@ void free_network() {
 int main(int argc, char** argv) {
     srand((unsigned int)time(NULL));
 
-    read_tracefile();
+    process_args(argc, argv);
 
     initialize_network();
     initialize_flows();
