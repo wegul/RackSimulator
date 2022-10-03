@@ -130,6 +130,7 @@ void work_per_timeslot()
             //record spine port queue lengths
             for (int j = 0; j < SPINE_PORT_COUNT; ++j) {
                 int32_t size = bounded_buffer_num_of_elements(spine->pkt_buffer[j]);
+                printf("spine %d port %d buflen %d\n", i, j, size);
                 assert(size <= SPINE_PORT_BUFFER_LEN);
                 ++(spine->queue_stat.queue_len_histogram[size]);
             }
@@ -146,9 +147,6 @@ void work_per_timeslot()
                     link_enqueue(links->spine_to_tor_link[spine_index][dst_tor], pkt);
                     printf("spine %d sent pkt to port %d\n", i, k);
                 }
-                else {
-                    free(pkt);
-                }
             }
         }
 
@@ -160,7 +158,7 @@ void work_per_timeslot()
             node_t node = nodes[i];
             int16_t node_index = node->node_index;
 
-            //add_host_flows(node);
+            add_host_flows(node);
             if (total_flows_started < num_of_flows_to_start) {
                 packet_t pkt = create_packet(i, node_index, 1, 0);
                 pkt->time_when_transmitted_from_src = curr_timeslot;

@@ -57,7 +57,7 @@ void update_stats_on_pkt_recv(node_t dst_node,
 
     //find the recv stat logger corres to curr app level flow
     int8_t found = 0;
-    flow_stat_logger_receiver_t r;
+    flow_stat_logger_receiver_t r = NULL;
     int64_t r_index = 0;
     arraylist_t r_list
         = dst_flow->flow_stat_logger_receiver_list;
