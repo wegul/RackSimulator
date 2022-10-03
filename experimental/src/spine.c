@@ -22,14 +22,16 @@ void free_spine(spine_t self)
 {
     if (self != NULL) {
         for (int i = 0; i < NUM_OF_TORS; ++i) {
-            free_buffer(self->pkt_buffer[i]);
+            if (self->pkt_buffer[i] != NULL) {
+                free_buffer(self->pkt_buffer[i]);
+            }
         }
 
         free(self);
     }
 }
 
-packet_t send_to_tor(spine_t spine, int16_t target_node, int16_t tor_num)
+packet_t send_to_tor(spine_t spine, int16_t tor_num)
 {
     //Grab the top packet in the correct virtual queue
     packet_t pkt = NULL;

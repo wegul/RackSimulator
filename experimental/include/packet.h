@@ -17,6 +17,7 @@ struct packet {
 typedef struct packet* packet_t;
 
 packet_t create_packet(int16_t, int16_t, int64_t, int64_t);
+void print_packet(packet_t);
 void free_packet(packet_t);
 
 #endif

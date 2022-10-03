@@ -11,15 +11,17 @@ LFLAGS = -lm -pthread
 
 INCLUDE = $(INCLUDEDIR)/*.h
 
-OBJ = $(OBJDIR)/buffer.o \
-      $(OBJDIR)/arraylist.o \
+OBJ = $(OBJDIR)/arraylist.o \
+      $(OBJDIR)/buffer.o \
+      $(OBJDIR)/flow.o \
+      $(OBJDIR)/flowlist.o \
       $(OBJDIR)/link.o \
-      $(OBJDIR)/node.o \
-      $(OBJDIR)/tor.o \
-      $(OBJDIR)/spine.o \
       $(OBJDIR)/links.o \
+      $(OBJDIR)/node.o \
       $(OBJDIR)/packet.o \
-      $(OBJDIR)/routing_table.o
+      $(OBJDIR)/routing_table.o \
+      $(OBJDIR)/spine.o \
+      $(OBJDIR)/tor.o 
 
 default: all
 

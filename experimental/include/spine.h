@@ -24,6 +24,6 @@ extern spine_t* spines;
 
 spine_t create_spine(int16_t);
 void free_spine(spine_t);
-packet_t send_to_tor(spine_t, int16_t, int16_t);
+packet_t send_to_tor(spine_t, int16_t);
 
 #endif
