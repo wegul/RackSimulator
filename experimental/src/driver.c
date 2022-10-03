@@ -8,235 +8,247 @@
 #include "spine.h"
 #include "links.h"
 
+// Default values for simulation
+static int pkt_size = 64; //in bytes
+static float link_bandwidth = 100; //in Gbps
+static float timeslot_len; //in ns
+
+int16_t header_overhead = 0;
+float per_hop_propagation_delay_in_ns = 0;
+int per_hop_propagation_delay_in_timeslots;
+volatile int64_t curr_timeslot = 0; //extern var
+volatile int64_t curr_epoch = 0; //extern var
+
+static int8_t start_logging = 0;
+static int8_t static_workload = 1;
+
+static int32_t max_epochs_to_run=2500;
+
+static volatile int8_t terminate = 0;
+static volatile int8_t terminate1 = 0;
+static volatile int8_t terminate2 = 0;
+static volatile int8_t terminate3 = 0;
+
+volatile int64_t num_of_flows_finished = 0; //extern var
+int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
+
+volatile int64_t total_flows_started = 0; //extern var
+int64_t num_of_flows_to_start = 500000; //stop after these many flows start
+
+// Network
 node_t* nodes;
 tor_t* tors;
 spine_t* spines;
 links_t links;
 
-// void work_per_timeslot()
-// {
-//     while (1) {
-// /*---------------------------------------------------------------------------*/
-//                                   //SPINE -- SEND
-// /*---------------------------------------------------------------------------*/
+void work_per_timeslot()
+{
+    while (1) {
+/*---------------------------------------------------------------------------*/
+                                  //SPINE -- SEND
+/*---------------------------------------------------------------------------*/
 
-//         for (int i = 0; i < NUM_OF_SPINES; ++i) {
-//             spine_t spine = spines[i];
-//             int16_t spine_index = spine->spine_index;
+        for (int i = 0; i < NUM_OF_SPINES; ++i) {
+            spine_t spine = spines[i];
+            int16_t spine_index = spine->spine_index;
 
-//             //record spine port queue lengths
-//             for (int j = 0; j < SPINE_PORT_COUNT; ++j) {
-//                 int32_t size = spine->pkt_buffer[];
-//                 printf("spine %d port %d buflen %d\n", i, j, size);
-//                 assert(size <= SPINE_PORT_BUFFER_LEN);
-//                 ++(spine->queue_stat.queue_len_histogram[size]);
-//             }
+            //record spine port queue lengths
+            for (int j = 0; j < SPINE_PORT_COUNT; ++j) {
+                int32_t size = (spine->pkt_buffer[j])->num_elements;
+                printf("spine %d port %d buflen %d\n", i, j, size);
+                assert(size <= SPINE_PORT_BUFFER_LEN);
+                ++(spine->queue_stat.queue_len_histogram[size]);
+            }
 
-//             //send the packet
-//             int j = curr_timeslot % NODES_PER_RACK;
-//             for (int k = 0; k < SPINE_PORT_COUNT; ++k) {
-//                 int16_t dst_node = source_list[spine_index][j][k];
-//                 int16_t dst_tor = dst_node / NODES_PER_RACK;
-//                 packet_t pkt = send_to_tor(spine, dst_node, dst_tor);
-//                 if (pkt != NULL) {
-//                     pkt->time_to_dequeue_from_link = curr_timeslot +
-//                         per_hop_propagation_delay_in_timeslots;
-//                     link_enqueue(links->spine_to_tor_link[spine_index][dst_tor], pkt);
-//                     printf("spine %d sent pkt to port %d\n", i, k);
-//                 }
-//             }
-//         }
+            //send the packet
+            int j = curr_timeslot % NODES_PER_RACK;
+            for (int k = 0; k < SPINE_PORT_COUNT; ++k) {
+                int16_t dst_node = 1;
+                int16_t dst_tor = dst_node / NODES_PER_RACK;
+                packet_t pkt = send_to_tor(spine, dst_node, dst_tor);
+                if (pkt != NULL) {
+                    pkt->time_to_dequeue_from_link = curr_timeslot +
+                        per_hop_propagation_delay_in_timeslots;
+                    link_enqueue(links->spine_to_tor_link[spine_index][dst_tor], pkt);
+                    printf("spine %d sent pkt to port %d\n", i, k);
+                }
+            }
+        }
 
-// /*---------------------------------------------------------------------------*/
-//                                   //HOST -- SEND
-// /*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+                                  //HOST -- SEND
+/*---------------------------------------------------------------------------*/
 
-//         for (int i = 0; i < NUM_OF_NODES; ++i) {
-//             node_t node = nodes[i];
-//             int16_t node_index = node->node_index;
+        for (int i = 0; i < NUM_OF_NODES; ++i) {
+            node_t node = nodes[i];
+            int16_t node_index = node->node_index;
 
-//             add_host_flows(node);
-//             if (total_flows_started < num_of_flows_to_start) {
-//                 packet_t pkt = create_packet(i, node_index, 1, 0);
-//                 pkt->time_when_transmitted_from_src = curr_timeslot;
+            if (total_flows_started < num_of_flows_to_start) {
+                packet_t pkt = create_packet(i, node_index, 1, 0);
+                pkt->time_when_transmitted_from_src = curr_timeslot;
 
-//                 int16_t dst_tor = node_index / NODES_PER_RACK;
-//                 pkt->time_to_dequeue_from_link = curr_timeslot +
-//                     per_hop_propagation_delay_in_timeslots;
-//                 link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-//                 total_flows_started++;
-//                 printf("host %d created pkt\n", i);
-//             }
-//         }
+                int16_t dst_tor = node_index / NODES_PER_RACK;
+                pkt->time_to_dequeue_from_link = curr_timeslot +
+                    per_hop_propagation_delay_in_timeslots;
+                link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+                total_flows_started++;
+                printf("host %d created pkt\n", i);
+            }
+        }
 
-// /*---------------------------------------------------------------------------*/
-//                           //ToR -- SEND TO HOST AND SPINE
-// /*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+                          //ToR -- SEND TO HOST AND SPINE
+/*---------------------------------------------------------------------------*/
 
-//         for (int i = 0; i < NUM_OF_TORS; ++i) {
-//             tor_t tor = tors[i];
-//             int16_t tor_index = tor->tor_index;
+        for (int i = 0; i < NUM_OF_TORS; ++i) {
+            tor_t tor = tors[i];
+            int16_t tor_index = tor->tor_index;
 
-//             //record upstream port queue lengths
-//             for (int j = 0; j < NUM_OF_SPINES; ++j) {
-//                 int32_t size = bounded_buffer_num_of_elements
-//                         (tor->upstream_pkt_buffer[j]);
-//                 ++(tor->queue_stat.upstream_queue_len_histogram[size]);
-//             }
+            //record upstream port queue lengths
+            for (int j = 0; j < NUM_OF_SPINES; ++j) {
+                int32_t size = (tor->upstream_pkt_buffer[j])->num_elements;
+                ++(tor->queue_stat.upstream_queue_len_histogram[size]);
+            }
 
-//             //record downstream port queue lengths
-//             for (int j = 0; j < NODES_PER_RACK; ++j) {
-//                 int32_t size = bounded_buffer_num_of_elements
-//                         (tor->downstream_pkt_buffer[j]);
-//                 ++(tor->queue_stat.downstream_queue_len_histogram[size]);
-//             }
+            //record downstream port queue lengths
+            for (int j = 0; j < NODES_PER_RACK; ++j) {
+                int32_t size = (tor->downstream_pkt_buffer[j])->num_elements;
+                ++(tor->queue_stat.downstream_queue_len_histogram[size]);
+            }
 
-//             //send to each spine
-//             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
-//                 packet_t pkt = send_to_spine(tor, tor_port);
-//                 if (pkt != NULL) {
-//                     pkt->time_to_dequeue_from_link = curr_timeslot +
-//                         per_hop_propagation_delay_in_timeslots; 
-//                     link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
-//                     //printf("ToR %d sent pkt to spine %d\n", i, tor_port);
-//                 }
-//             }
+            //send to each spine
+            for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
+                packet_t pkt = send_to_spine(tor, tor_port);
+                if (pkt != NULL) {
+                    pkt->time_to_dequeue_from_link = curr_timeslot +
+                        per_hop_propagation_delay_in_timeslots; 
+                    link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
+                    //printf("ToR %d sent pkt to spine %d\n", i, tor_port);
+                }
+            }
 
-//             //send to each host
-//             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
-//                 packet_t pkt = send_to_host(tor, tor_port);
-//                 if (pkt != NULL) {
-//                     int16_t dst_host = (tor_index * TOR_PORT_COUNT_LOW) + tor_port;
-//                     pkt->time_to_dequeue_from_link = curr_timeslot +
-//                         per_hop_propagation_delay_in_timeslots;
-//                     link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
-//                     //printf("ToR %d sent pkt to host %d\n", i, dst_host);
-//                 }
-//             }
-//         }
+            //send to each host
+            for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
+                packet_t pkt = send_to_host(tor, tor_port);
+                if (pkt != NULL) {
+                    int16_t dst_host = (tor_index * TOR_PORT_COUNT_LOW) + tor_port;
+                    pkt->time_to_dequeue_from_link = curr_timeslot +
+                        per_hop_propagation_delay_in_timeslots;
+                    link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
+                    //printf("ToR %d sent pkt to host %d\n", i, dst_host);
+                }
+            }
+        }
 
-// /*---------------------------------------------------------------------------*/
-//                               //ToR -- RECV FROM HOST AND SPINE
-// /*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+                              //ToR -- RECV FROM HOST AND SPINE
+/*---------------------------------------------------------------------------*/
         
-//         for (int i = 0; i < NUM_OF_TORS; ++i) {
-//             tor_t tor = tors[i];
-//             int16_t tor_index = tor->tor_index;
+        for (int i = 0; i < NUM_OF_TORS; ++i) {
+            tor_t tor = tors[i];
+            int16_t tor_index = tor->tor_index;
 
-//             //Recv packet from host
-//             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
-//                 //deq packet from the link
-//                 int16_t src_host = (tor_index * TOR_PORT_COUNT_LOW) + tor_port;
-//                 packet_t pkt = (packet_t)
-//                     link_peek(links->host_to_tor_link[src_host][tor_index]);
-//                 if (pkt != NULL) {
-//                     //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
-//                         int spine_id = hash(tor->routing_table, pkt->flow_id);
-//                         pkt = (packet_t)
-//                             link_dequeue(links->host_to_tor_link[src_host][tor_index]);
-//                         if (pkt != NULL) {
-//                             bounded_buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
-//                             printf("Tor %d recv pkt from host %d\n", i, tor_port);
-//                         }
-//                     //}
+            //Recv packet from host
+            for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
+                //deq packet from the link
+                int16_t src_host = (tor_index * TOR_PORT_COUNT_LOW) + tor_port;
+                packet_t pkt = (packet_t)
+                    link_peek(links->host_to_tor_link[src_host][tor_index]);
+                if (pkt != NULL) {
+                    //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
+                        int spine_id = hash(tor->routing_table, pkt->flow_id);
+                        pkt = (packet_t)
+                            link_dequeue(links->host_to_tor_link[src_host][tor_index]);
+                        if (pkt != NULL) {
+                            buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
+                            printf("Tor %d recv pkt from host %d\n", i, tor_port);
+                        }
+                    //}
                     
-//                 }
-//             }
+                }
+            }
 
-//             //Recv packet from spine
-//             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
-//                 //deq packet from the link
-//                 int16_t src_spine = tor_port;
-//                 packet_t pkt = (packet_t)
-//                     link_peek(links->spine_to_tor_link[src_spine][tor_index]);
-//                 if (pkt != NULL) {
-//                     //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
-//                         pkt = (packet_t)
-//                             link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
-//                         if (pkt != NULL) {
-//                             bounded_buffer_put(tor->downstream_pkt_buffer[src_spine], pkt);
-//                             printf("Tor %d recv pkt from spine %d\n", i, tor_port);
-//                         }
-//                     //}
+            //Recv packet from spine
+            for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
+                //deq packet from the link
+                int16_t src_spine = tor_port;
+                packet_t pkt = (packet_t)
+                    link_peek(links->spine_to_tor_link[src_spine][tor_index]);
+                if (pkt != NULL) {
+                    //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
+                        pkt = (packet_t)
+                            link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
+                        if (pkt != NULL) {
+                            buffer_put(tor->downstream_pkt_buffer[src_spine], pkt);
+                            printf("Tor %d recv pkt from spine %d\n", i, tor_port);
+                        }
+                    //}
                    
-//                 }
-//             }
-//         }
+                }
+            }
+        }
 
-// /*---------------------------------------------------------------------------*/
-//                                   //SPINE -- RECV
-// /*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+                                  //SPINE -- RECV
+/*---------------------------------------------------------------------------*/
 
-//         for (int i = 0; i < NUM_OF_SPINES; ++i) {
-//             spine_t spine = spines[i];
-//             int16_t spine_index = spine->spine_index;
+        for (int i = 0; i < NUM_OF_SPINES; ++i) {
+            spine_t spine = spines[i];
+            int16_t spine_index = spine->spine_index;
 
 
-//             for (int spine_port=0; spine_port<SPINE_PORT_COUNT; ++spine_port) {
-//                 //deq packet
-//                 int16_t src_tor = spine_port;
-//                 packet_t pkt = (packet_t) link_peek
-//                     (links->tor_to_spine_link[src_tor][spine_index]);
-//                 if (pkt != NULL) {  
-//                     //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
-//                         pkt = (packet_t) link_dequeue
-//                             (links->tor_to_spine_link[src_tor][spine_index]);
+            for (int spine_port=0; spine_port<SPINE_PORT_COUNT; ++spine_port) {
+                //deq packet
+                int16_t src_tor = spine_port;
+                packet_t pkt = (packet_t) link_peek
+                    (links->tor_to_spine_link[src_tor][spine_index]);
+                if (pkt != NULL) {  
+                    //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
+                        pkt = (packet_t) link_dequeue
+                            (links->tor_to_spine_link[src_tor][spine_index]);
 
-//                         //enq packet in the virtual queue
-//                         int16_t dst_host = pkt->dst_node;
-//                         int16_t dst_tor = dst_host / NODES_PER_RACK;
-//                         if (dst_host != -1) {
-//                             pkt->time_when_added_to_spine_queue = curr_epoch;
-//                             assert(bounded_buffer_put(spine->pkt_buffer[dst_tor], pkt)                                                                                                                                                                                                                                        
-//                                     != -1);
-//                             if (dst_host == -1) {
-//                                 free_packet(pkt);
-//                             }
-//                         }
-//                     //}
-//                 }
-//             }
-//         }
+                        //enq packet in the virtual queue
+                        int16_t dst_host = pkt->dst_node;
+                        int16_t dst_tor = dst_host / NODES_PER_RACK;
+                        if (dst_host != -1) {
+                            pkt->time_when_added_to_spine_queue = curr_epoch;
+                            assert(buffer_put(spine->pkt_buffer[dst_tor], pkt)                                                                                                                                                                                                                                        
+                                    != -1);
+                            if (dst_host == -1) {
+                                free_packet(pkt);
+                            }
+                        }
+                    //}
+                }
+            }
+        }
 
-// /*---------------------------------------------------------------------------*/
-//                                   //HOST -- RECV
-// /*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
+                                  //HOST -- RECV
+/*---------------------------------------------------------------------------*/
 
-//         for (int i = 0; i < NUM_OF_NODES; ++i) {
-//             node_t node = nodes[i];
-//             int16_t node_index = node->node_index;
+        for (int i = 0; i < NUM_OF_NODES; ++i) {
+            node_t node = nodes[i];
+            int16_t node_index = node->node_index;
 
-//             //deq packet
-//             int16_t src_tor = node_index / NODES_PER_RACK;
-//             packet_t pkt = (packet_t)
-//                 link_peek(links->tor_to_host_link[src_tor][node_index]);
+            //deq packet
+            int16_t src_tor = node_index / NODES_PER_RACK;
+            packet_t pkt = (packet_t)
+                link_peek(links->tor_to_host_link[src_tor][node_index]);
             
-//             if (pkt != NULL) {
+            if (pkt != NULL) {
                 
-//                 //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
-//                     pkt = (packet_t)
-//                         link_dequeue(links->tor_to_host_link[src_tor][node_index]);
+                //if (pkt->time_to_dequeue_from_link == curr_timeslot) {
+                    pkt = (packet_t)
+                        link_dequeue(links->tor_to_host_link[src_tor][node_index]);
 
-//                     //printf("%d vs %d\n", pkt->dst_node, node_index);
-//                     //assert(pkt->dst_node == -1 || pkt->dst_node == node_index);
-
-                    
-//                     update_pkt_counters(node, pkt);
-                    
-//                     //update flow stats
-//                     if (pkt->dst_node == node_index) {
-//                         update_stats_on_pkt_recv(node, pkt, static_workload, start_logging);
-//                     }
-//                     else {
-//                         num_of_flows_finished++;
-
-//                         //printf("miss: %d not %d\n", pkt->dst_node, node_index);
-//                     }
-
-//                     free_packet(pkt);
-//                 //}
-//             }
-//         }
+                    free_packet(pkt);
+                //}
+            }
+        }
+        break;
+    }
+}
 
 // /*---------------------------------------------------------------------------*/
 //                 //Data logging and state updates before next iteration
@@ -363,9 +375,10 @@ int main(int argc, char** argv) {
 
     initialize();
 
-    //work_per_timeslot();
+    work_per_timeslot();
 
     free_all();
+    printf("end\n");
 
     return 0;
 }
