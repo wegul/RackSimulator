@@ -1,6 +1,10 @@
+.vscode
 old_simulation/bin
 old_simulation/obj
 old_simulation/trace*
 simulation/bin
 simulation/obj
 simulation/trace*
+experimental/bin
+experimental/obj
+experimental/trace*
