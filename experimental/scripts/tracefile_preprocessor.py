@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', required=True)
     parser.add_argument('-b', default=10) # bandwidth in Gbps
-    parser.add_argument('-c', default=1500) #packet size, in bytes
+    parser.add_argument('-c', default=64) #packet size, in bytes
     parser.add_argument('-o', default=0) #header overhead, in bytes
     args = parser.parse_args()
 

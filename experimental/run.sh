@@ -4,7 +4,6 @@ function usage {
     echo 'usage: ./run.sh -f <filename> [-w <0/1> -e <epochs> -b <link bandwidth> -c <pkt size> -h <header overhead> -d <propagation delay in ns> -n <num of flows> -m <num of flows>]'
     echo '-f: trace file path'
     echo '-w: 1 = static workload; 0 = dynamic workload'
-    echo '-e: run the exp till specified num of epochs'
     echo '-b: link bandwidth (in Gbps)'
     echo '-c: packet size (in bytes)'
     echo '-h: header overhead (in bytes)'
@@ -16,23 +15,18 @@ function usage {
 
 filepath=""
 filename=""
-static_workload=1
-epochs="0"
-bandwidth=100
-pkt_size=64
+bandwidth=10
+pkt_size=1500
 header_overhead=0 #in bytes
 prop_delay=0
 numflowsfinish=5000
 numflowsstart=5000
+maxtimeslots=10000000
 
-while getopts "f:w:e:b:c:h:d:n:m:rpa" OPTION
+while getopts "f:b:c:h:d:n:m:t:rpa" OPTION
 do
     case $OPTION in
         f) filepath=$OPTARG
-            ;;
-        w) static_workload=$OPTARG
-            ;;
-        e) epochs=$OPTARG
             ;;
         b) bandwidth=$OPTARG
             ;;
@@ -46,6 +40,8 @@ do
             ;;
         m) numflowsstart=$OPTARG
             ;;
+        t) maxtimeslots=$OPTARG
+            ;;
         *) usage
             ;;
     esac
@@ -58,6 +54,6 @@ fi
 
 filename=$(basename "${filepath}") #extract the filename from the path
 
-echo -e "\n*** Running [./bin/driver -f "${filepath}" -w "${static_workload}" -e "${epochs}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}"] ***\n"
-./bin/driver -f "${filepath}" -w "${static_workload}" -e "${epochs}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}"
+echo -e "\n*** Running [./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}"] ***\n"
+./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}"
 

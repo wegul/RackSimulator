@@ -1,14 +1,4 @@
-#include "params.h"
-#include "arraylist.h"
-#include "buffer.h"
-#include "flow.h"
-#include "flowlist.h"
-#include "link.h"
-#include "packet.h"
-#include "node.h"
-#include "tor.h"
-#include "spine.h"
-#include "links.h"
+#include "driver.h"
 
 // Default values for simulation
 static int pkt_size = 64; //in bytes
@@ -20,9 +10,6 @@ float per_hop_propagation_delay_in_ns = 0;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
 
-static int8_t start_logging = 0;
-static int8_t static_workload = 1;
-
 static volatile int8_t terminate = 0;
 static volatile int8_t terminate1 = 0;
 static volatile int8_t terminate2 = 0;
@@ -33,6 +20,8 @@ int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 500000; //stop after these many flows start
+
+volatile int64_t max_timeslots = 10000000; // extern var
 
 // Network
 node_t * nodes;
@@ -81,32 +70,47 @@ void work_per_timeslot()
             int16_t node_index = node->node_index;
 
             if ((node->active_flows)->num_elements > 0) {
-                flow_t * flow = buffer_get(node->active_flows);
-                flow->active = 1;
-                flow->pkts_sent++;
-                int16_t src_node = flow->src;
-                int16_t dst_node = flow->dst;
-                int64_t flow_id = flow->flow_id;
-                int64_t seq_num = node->seq_num[dst_node];
-                packet_t pkt = create_packet(src_node, dst_node, flow_id, seq_num);
-                //node->seq_num[dst_node]++;
-                
-                if (flow->pkts_sent < flow->flow_size) {
-                    buffer_put(node->active_flows, flow);
-                }
-                else {
-                    flow->active = 0;
-                }
-                
-                pkt->time_when_transmitted_from_src = curr_timeslot;
+                int i = 0;
+                int pkt_sent = 0;
+                while (pkt_sent == 0 && i < (node->active_flows)->num_elements) {
+                    flow_t * check_flow = buffer_peek(node->active_flows, i);
+                    if (check_flow->active == 1 || check_flow->timeslot <= curr_timeslot){
+                        flow_t * flow = buffer_get(node->active_flows);
+                        int16_t src_node = flow->src;
+                        int16_t dst_node = flow->dst;
+                        int64_t flow_id = flow->flow_id;
+                        int64_t seq_num = node->seq_num[dst_node];
+                        packet_t pkt = create_packet(src_node, dst_node, flow_id, seq_num);
+                        node->seq_num[dst_node]++;
+                        if (flow->active == 0) {
+                            flowlist->active_flows++;
+                            total_flows_started++;
+                            printf("flow %d started\n", (int) flow_id);
+                        }
+                        flow->active = 1;
+                        flow->pkts_sent++;
+                        pkt_sent = 1;
 
-                int16_t dst_tor = node_index / NODES_PER_RACK;
-                pkt->time_to_dequeue_from_link = curr_timeslot +
-                    per_hop_propagation_delay_in_timeslots;
-                link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-                total_flows_started++;
-                printf("host %d created pkt\n", i);
-                print_packet(pkt);
+                        if (flow->pkts_sent < flow->flow_size) {
+                            buffer_put(node->active_flows, flow);
+                        }
+                        else {
+                            flowlist->active_flows--;
+                            flow->active = 0;
+                            flow->finished = 1;
+                            printf("flow %d finished\n", (int) flow_id);
+                        }
+
+                        pkt->time_when_transmitted_from_src = curr_timeslot;
+                        int16_t dst_tor = node_index / NODES_PER_RACK;
+                        pkt->time_to_dequeue_from_link = curr_timeslot +
+                            per_hop_propagation_delay_in_timeslots;
+                        link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+                        printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
+                        print_packet(pkt);
+                    }
+                    i++;
+                }
             }
         }
 
@@ -193,7 +197,6 @@ void work_per_timeslot()
                         buffer_put(tor->downstream_pkt_buffer[src_spine], pkt);
                         printf("Tor %d recv pkt from spine %d\n", i, tor_port);
                     }
-                   
                 }
             }
         }
@@ -255,9 +258,34 @@ void work_per_timeslot()
 /*---------------------------------------------------------------------------*/
                  //Data logging and state updates before next iteration
 /*---------------------------------------------------------------------------*/
+        if (flowlist->active_flows < 1) {
+            int no_flows_left = 1;
+            for (int i = 0; i < flowlist->num_flows; i++) {
+                if ((flowlist->flows[i])->finished == 0) {
+                    no_flows_left = 0;
+                }
+            }
+            if (no_flows_left > 0) {
+                terminate = 1;
+            }
+        }
 
+        if (total_flows_started >= num_of_flows_to_start) {
+            terminate2;
+        }
+
+        
         curr_timeslot++;
         if (curr_timeslot > 5) {
+            break;
+        }
+
+        if (terminate) {
+            printf("Finished all flows\n\n");
+            break;
+        }
+        if (terminate2) {
+            printf("Started %d flows\n\n", (int) total_flows_started);
             break;
         }
     }
@@ -276,9 +304,9 @@ static inline void usage()
 void process_args(int argc, char ** argv) {
     int opt;
     char filename[500] = "";
-    char out_filename[500] = "";
+    //char out_filename[500] = "";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -302,6 +330,10 @@ void process_args(int argc, char ** argv) {
             case 'm': 
                 num_of_flows_to_start = atoi(optarg);
                 printf("Stop experiment after %ld flows have started\n", num_of_flows_to_start);
+                break;
+            case 't':
+                max_timeslots = atoi(optarg);
+                printf("Stop experiment after %ld timeslots have finished\n", max_timeslots);
                 break;
             case 'f': 
                 if (strlen(optarg) < 500)
@@ -346,21 +378,23 @@ void read_tracefile(char * filename) {
             initialize_flow(flow_id, src, dst, flow_size_pkts, timeslot);
         }
         
+        printf("Flows initialized\n");
         fclose(fp);
     }
     return;
 }
 
 void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int timeslot) {
-    flow_t * new_flow = create_flow(flow_id, flow_size_pkts, src, dst);
+    flow_t * new_flow = create_flow(flow_id, flow_size_pkts, src, dst, timeslot);
     add_flow(flowlist, new_flow);
     buffer_put(nodes[src]->active_flows, new_flow);
+    printf("initialized flow %d\n", flow_id);
 }
 
 void initialize_flows() {
     flowlist = create_flowlist();
-    flow_t * f1 = create_flow(0, 1, 20, 65);
-    flow_t * f2 = create_flow(1, 1, 99, 1);
+    flow_t * f1 = create_flow(0, 1, 20, 65, 0);
+    flow_t * f2 = create_flow(1, 1, 99, 1, 0);
     add_flow(flowlist, f1);
     add_flow(flowlist, f2);
     buffer_put(nodes[20]->active_flows, f1);
@@ -370,6 +404,7 @@ void initialize_flows() {
 
 void free_flows() {
     free_flowlist(flowlist);
+    printf("Freed flows\n");
 }
 
 void initialize_network() {
@@ -423,6 +458,8 @@ void free_network() {
 
     //free links
     free_links(links);
+
+    printf("Freed network\n");
 }
 
 int main(int argc, char** argv) {
@@ -437,7 +474,7 @@ int main(int argc, char** argv) {
     free_flows();
     free_network();
 
-    printf("end\n");
+    printf("Finished execution\n");
 
     return 0;
 }
