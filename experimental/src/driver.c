@@ -49,8 +49,8 @@ void work_per_timeslot()
             for (int j = 0; j < SPINE_PORT_COUNT; ++j) {
                 int32_t size = (spine->pkt_buffer[j])->num_elements;
                 //printf("spine %d port %d buflen %d\n", i, j, size);
-                if (size > SPINE_PORT_BUFFER_LEN) {
-                    size = SPINE_PORT_BUFFER_LEN;
+                if (size >= MAX_HISTOGRAM_LEN) {
+                    size = MAX_HISTOGRAM_LEN - 1;
                 }
                 ++(spine->queue_stat.queue_len_histogram[size]);
             }
@@ -133,8 +133,8 @@ void work_per_timeslot()
             //record upstream port queue lengths
             for (int j = 0; j < NUM_OF_SPINES; ++j) {
                 int32_t size = (tor->upstream_pkt_buffer[j])->num_elements;
-                if (size > TOR_UPSTREAM_BUFFER_LEN) {
-                    size = TOR_UPSTREAM_BUFFER_LEN;
+                if (size > MAX_HISTOGRAM_LEN) {
+                    size = MAX_HISTOGRAM_LEN;
                 }
                 ++(tor->queue_stat.upstream_queue_len_histogram[size]);
             }
@@ -142,8 +142,8 @@ void work_per_timeslot()
             //record downstream port queue lengths
             for (int j = 0; j < NODES_PER_RACK; ++j) {
                 int32_t size = (tor->downstream_pkt_buffer[j])->num_elements;
-                if (size > TOR_DOWNSTREAM_BUFFER_LEN) {
-                    size = TOR_DOWNSTREAM_BUFFER_LEN;
+                if (size > MAX_HISTOGRAM_LEN) {
+                    size = MAX_HISTOGRAM_LEN;
                 }
                 ++(tor->queue_stat.downstream_queue_len_histogram[size]);
             }

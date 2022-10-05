@@ -11,7 +11,7 @@ spine_t create_spine(int16_t spine_index)
         self->pkt_buffer[i] = create_buffer(SPINE_PORT_BUFFER_LEN);
     }
 
-    for (int i = 0; i < SPINE_PORT_BUFFER_LEN+1; ++i) {
+    for (int i = 0; i < MAX_HISTOGRAM_LEN; ++i) {
         self->queue_stat.queue_len_histogram[i] = 0;
     }
 

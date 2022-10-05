@@ -17,7 +17,7 @@ void print_spine_stats(spine_t * spines) {
         int max_queue_len = 0;
         int sum = 0;
         int count = 0;
-        for (int j = 0; j < SPINE_PORT_BUFFER_LEN+1; j++) {
+        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
             int num_in_len = histogram[j];
             sum += num_in_len * j;
             count += num_in_len;
@@ -68,7 +68,7 @@ void print_tor_stats(tor_t * tors) {
         int max_up_queue_len = 0;
         int sum = 0;
         int count = 0;
-        for (int j = 0; j < TOR_UPSTREAM_BUFFER_LEN+1; j++) {
+        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
             int num_in_len = up_histogram[j];
             sum += num_in_len * j;
             count += num_in_len;
@@ -82,7 +82,7 @@ void print_tor_stats(tor_t * tors) {
         int max_down_queue_len = 0;
         sum = 0;
         count = 0;
-        for (int j = 0; j < TOR_DOWNSTREAM_BUFFER_LEN+1; j++) {
+        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
             int num_in_len = down_histogram[j];
             sum += num_in_len * j;
             count += num_in_len;

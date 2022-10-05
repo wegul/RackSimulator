@@ -8,7 +8,7 @@
 #include "arraylist.h"
 
 typedef struct {
-    int64_t queue_len_histogram[SPINE_PORT_BUFFER_LEN+1];
+    int64_t queue_len_histogram[MAX_HISTOGRAM_LEN];
 } spine_queue_stats_t;
 
 struct spine {

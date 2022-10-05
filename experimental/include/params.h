@@ -49,6 +49,7 @@
 #define LINK_CAPACITY 50
 
 #define MAX_FLOW_ID 1000
+#define MAX_HISTOGRAM_LEN 200
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;

@@ -7,8 +7,8 @@
 #include "routing_table.h"
 
 typedef struct {
-    int64_t upstream_queue_len_histogram[TOR_UPSTREAM_BUFFER_LEN+1];
-    int64_t downstream_queue_len_histogram[TOR_DOWNSTREAM_BUFFER_LEN+1];
+    int64_t upstream_queue_len_histogram[MAX_HISTOGRAM_LEN];
+    int64_t downstream_queue_len_histogram[MAX_HISTOGRAM_LEN];
 } tor_queue_stats_t;
 
 struct tor {
