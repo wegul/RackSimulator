@@ -10,9 +10,10 @@ flow_t * create_flow(int64_t flow_id, int64_t flow_size, int16_t host_index, int
     self->src = host_index;
     self->dst = dst_index;
     self->timeslot = timeslot;
+    self->start_timeslot = 0;
+    self->finish_timeslot = 0;
     self->pkts_sent = 0;
     self->pkts_received = 0;
-    
 
     return self;
 }

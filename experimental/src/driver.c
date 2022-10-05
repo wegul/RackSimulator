@@ -2,7 +2,7 @@
 
 // Default values for simulation
 static int pkt_size = 64; //in bytes
-static float link_bandwidth = 100; //in Gbps
+static float link_bandwidth = 10; //in Gbps
 static float timeslot_len; //in ns
 
 int16_t header_overhead = 0;
@@ -23,6 +23,9 @@ volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 500000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 10000000; // extern var
+
+// Output file
+FILE * out_fp = NULL;
 
 // Network
 node_t * nodes;
@@ -75,12 +78,9 @@ void work_per_timeslot()
             int16_t node_index = node->node_index;
 
             if ((node->active_flows)->num_elements > 0) {
-                int j = 0;
-                int pkt_sent = 0;
-                while (pkt_sent == 0 && j < (node->active_flows)->num_elements) {
-                    flow_t * check_flow = buffer_peek(node->active_flows, j);
-                    if (check_flow->active == 1 || check_flow->timeslot <= curr_timeslot){
-                        flow_t * flow = buffer_get(node->active_flows);
+                for (int j = 0; j < (node->active_flows)->num_elements; j++) {
+                    flow_t * flow = buffer_peek(node->active_flows, j);
+                    if (flow->active == 1 || flow->timeslot <= curr_timeslot){
                         int16_t src_node = flow->src;
                         int16_t dst_node = flow->dst;
                         int64_t flow_id = flow->flow_id;
@@ -89,21 +89,20 @@ void work_per_timeslot()
                         node->seq_num[dst_node]++;
                         if (flow->active == 0) {
                             flowlist->active_flows++;
+                            flow->start_timeslot = curr_timeslot;
                             total_flows_started++;
-#ifdef DEBUG_DRIVER
+#ifdef DEBUG_DRIVER 
                             printf("flow %d started\n", (int) flow_id);
 #endif
                         }
                         flow->active = 1;
                         flow->pkts_sent++;
-                        pkt_sent = 1;
 
-                        if (flow->pkts_sent < flow->flow_size) {
-                            buffer_put(node->active_flows, flow);
-                        }
-                        else {
+                        if (flow->pkts_sent >= flow->flow_size) {
+                            buffer_remove(node->active_flows, j);
                             flowlist->active_flows--;
                             flow->active = 0;
+                            j--;
 #ifdef DEBUG_DRIVER
                             printf("flow %d sending final packet\n", (int) flow_id);
 #endif
@@ -116,10 +115,9 @@ void work_per_timeslot()
                         link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
 #ifdef DEBUG_DRIVER
                         printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
-                        print_packet(pkt)
+                        print_packet(pkt);
 #endif
                     }
-                    j++;
                 }
             }
         }
@@ -287,7 +285,9 @@ void work_per_timeslot()
                 if (flow->pkts_received == flow->flow_size) {
                     flow->active = 0;
                     flow->finished = 1;
+                    flow->finish_timeslot = curr_timeslot;
                     num_of_flows_finished++;
+                    write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
 #ifdef DEBUG_DRIVER
                     printf("Flow %d finished\n", (int) flow->flow_id);
 #endif
@@ -334,6 +334,8 @@ void work_per_timeslot()
         }
 
         if (terminate0 || terminate1 || terminate2 || terminate3) {
+            double curr_time = curr_timeslot * timeslot_len / 1e9;
+            printf("Finished in %f seconds\n", curr_time);
             break;
         }
 
@@ -354,7 +356,8 @@ static inline void usage()
 void process_args(int argc, char ** argv) {
     int opt;
     char filename[500] = "";
-    //char out_filename[500] = "";
+    char out_filename[504] = "";
+    char out_suffix[4] = ".out";
 
     while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:")) != -1) {
         switch(opt) {
@@ -386,8 +389,11 @@ void process_args(int argc, char ** argv) {
                 printf("Stop experiment after %ld timeslots have finished\n", max_timeslots);
                 break;
             case 'f': 
-                if (strlen(optarg) < 500)
+                if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
+                    strncpy(out_filename, filename, strlen(filename));
+                    strncat(out_filename, out_suffix, 4);
+                }
                 else
                     usage();
                 break;
@@ -406,6 +412,7 @@ void process_args(int argc, char ** argv) {
     printf("\n");
 
     read_tracefile(filename);
+    out_fp = open_outfile(out_filename);
 }
 
 void read_tracefile(char * filename) {
@@ -440,7 +447,7 @@ void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int time
         add_flow(flowlist, new_flow);
         buffer_put(nodes[src]->active_flows, new_flow);
 #ifdef DEBUG_DRIVER
-        //printf("initialized flow %d src %d dst %d flow_size %d ts %d\n", flow_id, src, dst, flow_size_pkts, timeslot);
+        printf("initialized flow %d src %d dst %d flow_size %d ts %d\n", flow_id, src, dst, flow_size_pkts, timeslot);
 #endif
     }
 }
@@ -528,6 +535,7 @@ int main(int argc, char** argv) {
 
     free_flows();
     free_network();
+    fclose(out_fp);
 
     printf("Finished execution\n");
 

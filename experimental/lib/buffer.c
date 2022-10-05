@@ -41,19 +41,22 @@ int8_t buffer_put(buffer_t * self, void * element) {
     return -1;
 }
 
-void * buffer_get(buffer_t * self) {
-    void * element = malloc(sizeof(void *));
-    element = NULL;
-    if (self != NULL && self->num_elements > 0) {
-        element = self->buffer[0];
+void * buffer_remove(buffer_t * self, int32_t index) {
+    void * element = NULL;
+    if (self != NULL && self->num_elements > index) {
+        element = self->buffer[index];
         self->num_elements--;
-        int i = 0;
-        for (i = 0; i < self->num_elements; i++) {
+        int i = index;
+        for (i = index; i < self->num_elements; i++) {
             self->buffer[i] = self->buffer[i+1];
         }
         self->buffer[i] = NULL;
     }
     return element;
+}
+
+void * buffer_get(buffer_t * self) {
+    return buffer_remove(self, 0);
 }
 
 void * buffer_peek(buffer_t * self, int32_t index) {
@@ -63,6 +66,8 @@ void * buffer_peek(buffer_t * self, int32_t index) {
     }
     return element;
 }
+
+
 
 void buffer_clear(buffer_t * self) {
     if (self != NULL && self->buffer != NULL) {
