@@ -98,7 +98,7 @@ void work_per_timeslot()
                         else {
                             flowlist->active_flows--;
                             flow->active = 0;
-                            printf("flow %d sent final packet\n", (int) flow_id);
+                            printf("flow %d sending final packet\n", (int) flow_id);
                         }
 
                         pkt->time_when_transmitted_from_src = curr_timeslot;
@@ -269,7 +269,11 @@ void work_per_timeslot()
         }
 
 /*---------------------------------------------------------------------------*/
-                 //Data logging and state updates before next iteration
+                 //Data logging
+/*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
+                 //State updates before next iteration
 /*---------------------------------------------------------------------------*/
         if (flowlist->active_flows < 1) {
             int no_flows_left = 1;
@@ -279,41 +283,30 @@ void work_per_timeslot()
                 }
             }
             if (no_flows_left > 0) {
+                printf("Finished all flows\n\n");
                 terminate0 = 1;
             }
         }
 
         if (total_flows_started >= num_of_flows_to_start) {
+            printf("Started %d flows\n\n", (int) total_flows_started);
             terminate1 = 1;
         }
 
         if (num_of_flows_finished >= num_of_flows_to_finish) {
+            printf("Finished %d flows\n\n", (int) num_of_flows_finished);
             terminate2 = 1;
         }
 
         if (curr_timeslot >= max_timeslots) {
+            printf("Reached max timeslot %d\n\n", (int) curr_timeslot);
             terminate3 = 1;
         }
 
-        if (terminate0) {
-            printf("Finished all flows\n\n");
+        if (terminate0 || terminate1 || terminate2 || terminate3) {
             break;
         }
 
-        if (terminate1) {
-            printf("Started %d flows\n\n", (int) total_flows_started);
-            break;
-        }
-
-        if (terminate2) {
-            printf("Finished %d flows\n\n", (int) num_of_flows_finished);
-            break;
-        }
-         
-        if (terminate3) {
-            printf("Reached max timeslot %d\n\n", (int) curr_timeslot);
-            break;
-        }
         curr_timeslot++;
     }
 
@@ -497,6 +490,7 @@ int main(int argc, char** argv) {
     //initialize_flows();
     
     work_per_timeslot();
+    print_system_stats(spines, tors);
 
     free_flows();
     free_network();

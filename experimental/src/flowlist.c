@@ -36,7 +36,6 @@ void free_flowlist(flowlist_t * self) {
     if (self != NULL) {
         for (int i = 0; i < MAX_FLOW_ID; i++) {
             if (self->flows[i] != NULL) {
-                printf("freed flow %d\n", i);
                 free(self->flows[i]);
             }
         }
