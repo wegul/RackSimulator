@@ -13,7 +13,7 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id,
 }
 
 void print_packet(packet_t self) {
-    printf("pkt: %d %d %d %d\n", (int) self->src_node, (int) self->dst_node, (int) self->flow_id, (int) self->seq_num);
+    printf("pkt: src %d dst %d flow %d seq %d\n", (int) self->src_node, (int) self->dst_node, (int) self->flow_id, (int) self->seq_num);
 }
 
 void free_packet(packet_t self)

@@ -10,10 +10,11 @@ float per_hop_propagation_delay_in_ns = 0;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
 
-static volatile int8_t terminate = 0;
+static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
 static volatile int8_t terminate2 = 0;
 static volatile int8_t terminate3 = 0;
+static volatile int8_t terminate4 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
 int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
@@ -70,10 +71,10 @@ void work_per_timeslot()
             int16_t node_index = node->node_index;
 
             if ((node->active_flows)->num_elements > 0) {
-                int i = 0;
+                int j = 0;
                 int pkt_sent = 0;
-                while (pkt_sent == 0 && i < (node->active_flows)->num_elements) {
-                    flow_t * check_flow = buffer_peek(node->active_flows, i);
+                while (pkt_sent == 0 && j < (node->active_flows)->num_elements) {
+                    flow_t * check_flow = buffer_peek(node->active_flows, j);
                     if (check_flow->active == 1 || check_flow->timeslot <= curr_timeslot){
                         flow_t * flow = buffer_get(node->active_flows);
                         int16_t src_node = flow->src;
@@ -97,8 +98,7 @@ void work_per_timeslot()
                         else {
                             flowlist->active_flows--;
                             flow->active = 0;
-                            flow->finished = 1;
-                            printf("flow %d finished\n", (int) flow_id);
+                            printf("flow %d sent final packet\n", (int) flow_id);
                         }
 
                         pkt->time_when_transmitted_from_src = curr_timeslot;
@@ -109,7 +109,7 @@ void work_per_timeslot()
                         printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
                         print_packet(pkt);
                     }
-                    i++;
+                    j++;
                 }
             }
         }
@@ -219,6 +219,8 @@ void work_per_timeslot()
                     pkt = (packet_t) link_dequeue
                         (links->tor_to_spine_link[src_tor][spine_index]);
 
+                    printf("Spine %d recv pkt from ToR %d\n", spine_index, src_tor);
+
                     //enq packet in the virtual queue
                     int16_t dst_host = pkt->dst_node;
                     int16_t dst_tor = dst_host / NODES_PER_RACK;
@@ -248,9 +250,20 @@ void work_per_timeslot()
                 link_peek(links->tor_to_host_link[src_tor][node_index]);
             
             if (pkt != NULL) {
+                assert(pkt->dst_node == node_index);
                 pkt = (packet_t)
                     link_dequeue(links->tor_to_host_link[src_tor][node_index]);
                 printf("host %d received packet from ToR %d\n", node_index, src_tor);
+                flow_t * flow = flowlist->flows[pkt->flow_id];
+                assert(flow != NULL);
+                flow->pkts_received++;
+
+                if (flow->pkts_received == flow->flow_size) {
+                    flow->active = 0;
+                    flow->finished = 1;
+                    num_of_flows_finished++;
+                    printf("Flow %d finished\n", (int) flow->flow_id);
+                }
                 free_packet(pkt);
             }
         }
@@ -266,28 +279,42 @@ void work_per_timeslot()
                 }
             }
             if (no_flows_left > 0) {
-                terminate = 1;
+                terminate0 = 1;
             }
         }
 
         if (total_flows_started >= num_of_flows_to_start) {
-            terminate2;
+            terminate1 = 1;
         }
 
-        
-        curr_timeslot++;
-        if (curr_timeslot > 5) {
-            break;
+        if (num_of_flows_finished >= num_of_flows_to_finish) {
+            terminate2 = 1;
         }
 
-        if (terminate) {
+        if (curr_timeslot >= max_timeslots) {
+            terminate3 = 1;
+        }
+
+        if (terminate0) {
             printf("Finished all flows\n\n");
             break;
         }
-        if (terminate2) {
+
+        if (terminate1) {
             printf("Started %d flows\n\n", (int) total_flows_started);
             break;
         }
+
+        if (terminate2) {
+            printf("Finished %d flows\n\n", (int) num_of_flows_finished);
+            break;
+        }
+         
+        if (terminate3) {
+            printf("Reached max timeslot %d\n\n", (int) curr_timeslot);
+            break;
+        }
+        curr_timeslot++;
     }
 
 
@@ -388,7 +415,7 @@ void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int time
     flow_t * new_flow = create_flow(flow_id, flow_size_pkts, src, dst, timeslot);
     add_flow(flowlist, new_flow);
     buffer_put(nodes[src]->active_flows, new_flow);
-    printf("initialized flow %d\n", flow_id);
+    printf("initialized flow %d src %d dst %d flow_size %d ts %d\n", flow_id, src, dst, flow_size_pkts, timeslot);
 }
 
 void initialize_flows() {
