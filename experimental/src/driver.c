@@ -278,7 +278,8 @@ void work_per_timeslot()
         if (flowlist->active_flows < 1) {
             int no_flows_left = 1;
             for (int i = 0; i < flowlist->num_flows; i++) {
-                if ((flowlist->flows[i])->finished == 0) {
+                flow_t * flow = flowlist->flows[i];
+                if (flow != NULL && flow->finished == 0) {
                     no_flows_left = 0;
                 }
             }
