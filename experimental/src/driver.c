@@ -278,16 +278,8 @@ void process_args(int argc, char ** argv) {
     char filename[500] = "";
     char out_filename[500] = "";
 
-    while ((opt = getopt(argc, argv, "f:w:b:c:h:d:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:m:")) != -1) {
         switch(opt) {
-            case 'w': 
-                static_workload = atoi(optarg);
-                if(static_workload == 0){
-                    printf("Running a non-static workload file!\n");
-                } else {
-                    printf("Running a static workload file!\n");
-                }
-                break;
             case 'c': 
                 pkt_size = atoi(optarg);
                 printf("Running with a pkt size of: %dB\n", pkt_size);
@@ -324,9 +316,9 @@ void process_args(int argc, char ** argv) {
     }
 
     timeslot_len = (pkt_size * 8) / link_bandwidth;
-    printf("Running with a slot length of %fns\b", timeslot_len);
+    printf("Running with a slot length of %fns\n", timeslot_len);
 
-    per_hop_propogation_delay_in_timeslots = round((float)per_hop_propagation_delay_in_ns / (float)timeslot_len);
+    per_hop_propagation_delay_in_timeslots = round((float)per_hop_propagation_delay_in_ns / (float)timeslot_len);
     printf("Per hop propagation delay: %f ns (%d timeslots)\n",
         per_hop_propagation_delay_in_ns, per_hop_propagation_delay_in_timeslots);
     printf("\n");
@@ -335,19 +327,34 @@ void process_args(int argc, char ** argv) {
 }
 
 void read_tracefile(char * filename) {
-    int fd;
-    char * saved_ptr;
+    FILE * fp;
+    flowlist = create_flowlist();
     if (strcmp(filename, "")) {
-        fd = open(filename, O_RDONLY);
-        if (fd == -1) {
+        fp = fopen(filename, "r");
+        if (fp == NULL) {
             perror("open");
             exit(1);
         }
-        else {
-            
+        int flow_id = -1;
+        int src = -1;
+        int dst = -1;
+        int flow_size_bytes = -1;
+        int flow_size_pkts = -1;
+        int timeslot = -1;
+        
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d", &flow_id, &src, &dst, &flow_size_bytes, &flow_size_pkts, &timeslot) == 6 ) {
+            initialize_flow(flow_id, src, dst, flow_size_pkts, timeslot);
         }
+        
+        fclose(fp);
     }
     return;
+}
+
+void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int timeslot) {
+    flow_t * new_flow = create_flow(flow_id, flow_size_pkts, src, dst);
+    add_flow(flowlist, new_flow);
+    buffer_put(nodes[src]->active_flows, new_flow);
 }
 
 void initialize_flows() {
@@ -421,10 +428,9 @@ void free_network() {
 int main(int argc, char** argv) {
     srand((unsigned int)time(NULL));
 
-    process_args(argc, argv);
-
     initialize_network();
-    initialize_flows();
+    process_args(argc, argv);
+    //initialize_flows();
     
     work_per_timeslot();
 
