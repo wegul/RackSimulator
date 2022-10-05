@@ -23,7 +23,17 @@ int8_t buffer_put(buffer_t * self, void * element) {
         self->num_elements++;
         if (self->num_elements >= self->size) {
             self->size *= 2;
-            self->buffer = (void**) realloc(self->buffer, self->size * sizeof(void*));
+
+            void ** new_buffer = NULL;
+            new_buffer = (void **) malloc(self->size * sizeof(void *));
+            MALLOC_TEST(new_buffer, __LINE__);
+            for (int i = 0; i < self->size; i++) {
+                new_buffer[i] = NULL;
+            }
+            memcpy(new_buffer, self->buffer, (self->size * sizeof(void *) / 2));
+            free(self->buffer);
+            self->buffer = new_buffer;
+            //self->buffer = (void**) realloc(self->buffer, self->size * sizeof(void*));
         }
         self->buffer[self->num_elements-1] = element;
         return 0;
@@ -55,7 +65,7 @@ void * buffer_peek(buffer_t * self, int32_t index) {
 }
 
 void buffer_clear(buffer_t * self) {
-    if (self != NULL) {
+    if (self != NULL && self->buffer != NULL) {
         for (int i = 0; i < self->size; i++) {
             if (self->buffer[i] != NULL) {
                 free(self->buffer[i]);

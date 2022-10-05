@@ -9,6 +9,8 @@ LIBDIR = lib
 CFLAGS = -std=gnu99 -g -O3 -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 
+#CFLAGS += -DDEBUG_DRIVER
+
 INCLUDE = $(INCLUDEDIR)/*.h
 
 OBJ = $(OBJDIR)/arraylist.o \

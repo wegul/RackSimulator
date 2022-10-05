@@ -33,7 +33,7 @@
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
 #define OVERSUBSCRIPTION 1
-#define NUM_OF_RACKS 9
+#define NUM_OF_RACKS 32
 #define NODES_PER_RACK 16
 #define NUM_OF_NODES (NUM_OF_RACKS * NODES_PER_RACK)
 #define NUM_OF_SPINES (NODES_PER_RACK/OVERSUBSCRIPTION)
@@ -48,7 +48,7 @@
 
 #define LINK_CAPACITY 50
 
-#define MAX_FLOW_ID 255
+#define MAX_FLOW_ID 400
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;
