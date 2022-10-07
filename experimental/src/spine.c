@@ -7,12 +7,9 @@ spine_t create_spine(int16_t spine_index)
 
     self->spine_index = spine_index;
 
-    for (int i = 0; i < NUM_OF_TORS; i++) {
+    for (int i = 0; i < SPINE_PORT_COUNT; i++) {
         self->pkt_buffer[i] = create_buffer(SPINE_PORT_BUFFER_LEN);
-    }
-
-    for (int i = 0; i < MAX_HISTOGRAM_LEN; ++i) {
-        self->queue_stat.queue_len_histogram[i] = 0;
+        self->queue_stat[i] = create_timeseries();
     }
 
     return self;
@@ -21,10 +18,11 @@ spine_t create_spine(int16_t spine_index)
 void free_spine(spine_t self)
 {
     if (self != NULL) {
-        for (int i = 0; i < NUM_OF_TORS; ++i) {
+        for (int i = 0; i < SPINE_PORT_COUNT; ++i) {
             if (self->pkt_buffer[i] != NULL) {
                 free_buffer(self->pkt_buffer[i]);
             }
+            free_timeseries(self->queue_stat[i]);
         }
 
         free(self);

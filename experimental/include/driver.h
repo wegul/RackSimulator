@@ -13,6 +13,7 @@
 #include "spine.h"
 #include "links.h"
 #include "system_stats.h"
+#include "timeseries.h"
 
 void read_tracefile(char * filename);
 void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int timeslot);

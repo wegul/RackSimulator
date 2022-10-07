@@ -22,7 +22,7 @@ int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 500000; //stop after these many flows start
 
-volatile int64_t max_timeslots = 10000000; // extern var
+volatile int64_t max_timeslots = 1000000; // extern var
 
 // Output file
 FILE * out_fp = NULL;
@@ -48,11 +48,8 @@ void work_per_timeslot()
             //record spine port queue lengths
             for (int j = 0; j < SPINE_PORT_COUNT; ++j) {
                 int32_t size = (spine->pkt_buffer[j])->num_elements;
-                //printf("spine %d port %d buflen %d\n", i, j, size);
-                if (size >= MAX_HISTOGRAM_LEN) {
-                    size = MAX_HISTOGRAM_LEN - 1;
-                }
-                ++(spine->queue_stat.queue_len_histogram[size]);
+                //++(spine->queue_stat.queue_len_histogram[size]);
+                timeseries_add(spine->queue_stat[j], size);
             }
 
             //send the packet
@@ -63,7 +60,7 @@ void work_per_timeslot()
                         per_hop_propagation_delay_in_timeslots;
                     link_enqueue(links->spine_to_tor_link[spine_index][k], pkt);
 #ifdef DEBUG_DRIVER
-                    printf("spine %d sent pkt to ToR %d\n", i, k);
+                    printf("spine %d sent pkt to ToR %d on ts %d\n", i, k, (int) curr_timeslot);
 #endif
                 }
             }
@@ -133,19 +130,13 @@ void work_per_timeslot()
             //record upstream port queue lengths
             for (int j = 0; j < NUM_OF_SPINES; ++j) {
                 int32_t size = (tor->upstream_pkt_buffer[j])->num_elements;
-                if (size > MAX_HISTOGRAM_LEN) {
-                    size = MAX_HISTOGRAM_LEN;
-                }
-                ++(tor->queue_stat.upstream_queue_len_histogram[size]);
+                timeseries_add(tor->upstream_queue_stat[j], size);
             }
 
             //record downstream port queue lengths
             for (int j = 0; j < NODES_PER_RACK; ++j) {
                 int32_t size = (tor->downstream_pkt_buffer[j])->num_elements;
-                if (size > MAX_HISTOGRAM_LEN) {
-                    size = MAX_HISTOGRAM_LEN;
-                }
-                ++(tor->queue_stat.downstream_queue_len_histogram[size]);
+                timeseries_add(tor->downstream_queue_stat[j], size);
             }
 
             //send to each spine
@@ -214,9 +205,10 @@ void work_per_timeslot()
                     pkt = (packet_t)
                         link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
                     if (pkt != NULL) {
-                        buffer_put(tor->downstream_pkt_buffer[src_spine], pkt);
+                        int node_index = pkt->dst_node % NODES_PER_RACK;
+                        buffer_put(tor->downstream_pkt_buffer[node_index], pkt);
 #ifdef DEBUG_DRIVER
-                        printf("Tor %d recv pkt from spine %d\n", i, tor_port);
+                        printf("Tor %d recv pkt from spine %d on ts %d\n", i, tor_port, (int) curr_timeslot);
 #endif
                     }
                 }

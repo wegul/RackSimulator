@@ -10,16 +10,13 @@ tor_t create_tor(int16_t tor_index)
     for (int i = 0; i < NODES_PER_RACK; ++i) {
         self->downstream_pkt_buffer[i]
             = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN);
+        self->downstream_queue_stat[i] = create_timeseries();
     }
 
     for (int i = 0; i < NUM_OF_SPINES; ++i) {
         self->upstream_pkt_buffer[i]
             = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
-    }
-
-    for (int i = 0; i < MAX_HISTOGRAM_LEN; ++i) {
-        self->queue_stat.upstream_queue_len_histogram[i] = 0;
-        self->queue_stat.downstream_queue_len_histogram[i] = 0;
+        self->upstream_queue_stat[i] = create_timeseries();
     }
     
     create_routing_table(self->routing_table);
@@ -33,10 +30,12 @@ void free_tor(tor_t self)
 
         for (int i = 0; i < NODES_PER_RACK; ++i) {
             free_buffer(self->downstream_pkt_buffer[i]);
+            free_timeseries(self->downstream_queue_stat[i]);
         }
 
         for (int i = 0; i < NUM_OF_SPINES; ++i) {
             free_buffer(self->upstream_pkt_buffer[i]);
+            free_timeseries(self->upstream_queue_stat[i]);
         }
 
         free(self);

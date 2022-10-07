@@ -5,11 +5,7 @@
 #include "buffer.h"
 #include "packet.h"
 #include "routing_table.h"
-
-typedef struct {
-    int64_t upstream_queue_len_histogram[MAX_HISTOGRAM_LEN];
-    int64_t downstream_queue_len_histogram[MAX_HISTOGRAM_LEN];
-} tor_queue_stats_t;
+#include "timeseries.h"
 
 struct tor {
     int16_t tor_index;
@@ -17,7 +13,8 @@ struct tor {
     buffer_t * downstream_pkt_buffer[NODES_PER_RACK];
     buffer_t * upstream_pkt_buffer[NUM_OF_SPINES];
 
-    tor_queue_stats_t queue_stat;
+    timeseries_t * downstream_queue_stat[NODES_PER_RACK];
+    timeseries_t * upstream_queue_stat[NUM_OF_SPINES];
 };
 typedef struct tor* tor_t;
 

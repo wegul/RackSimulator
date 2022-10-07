@@ -6,84 +6,38 @@ void print_system_stats(spine_t * spines, tor_t * tors) {
 }
 
 void print_spine_stats(spine_t * spines) {
-    int * max_spines = malloc(sizeof(int) * NUM_OF_SPINES);
     for (int i = 0; i < NUM_OF_SPINES; i++) {
-        spine_t spine = spines[i];
-        spine_queue_stats_t spine_stat = spine->queue_stat;
-        int64_t * histogram = spine_stat.queue_len_histogram;
-        int max_queue_len = 0;
-        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
-            int num_in_len = histogram[j];
-            if (num_in_len > 0) {
-                max_queue_len = j;
+        printf("Max Queue Lens at Spine %d:\n[", i);
+        for (int j = 0; j < SPINE_PORT_COUNT; j++) {
+            if (j != 0) {
+                printf(", ");
             }
+            printf("%d", (int) spines[i]->queue_stat[j]->max_val);
         }
-        max_spines[i] = max_queue_len;
+        printf("]\n\n");
     }
-
-    printf("Max Queue Len at each Spine:\n[");
-    for(int i = 0; i < NUM_OF_SPINES; i++) {
-        if (i != 0) {
-            printf(", ");
-        }
-        printf("%d", max_spines[i]);
-    }
-    printf("]\n");
-
-    free(max_spines);
-    printf("\n");
 }
 
 void print_tor_stats(tor_t * tors) {
-    int * up_tor_max = malloc(sizeof(int) * NUM_OF_TORS);
-    int * down_tor_max = malloc(sizeof(int) * NUM_OF_TORS);
     for (int i = 0; i < NUM_OF_TORS; i++) {
-        tor_t tor = tors[i];
-        tor_queue_stats_t tor_stat = tor->queue_stat;
-        int64_t * up_histogram = tor_stat.upstream_queue_len_histogram;
-        int64_t * down_histogram = tor_stat.downstream_queue_len_histogram;
-
-        int max_up_queue_len = 0;
-        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
-            int num_in_len = up_histogram[j];
-            if (num_in_len > 0) {
-                max_up_queue_len = j;
+        printf("Max Upstream Queue Lens at Tor %d:\n[", i);
+        for(int j = 0; j < NUM_OF_SPINES; j++) {
+            if (j != 0) {
+                printf(", ");
             }
+            printf("%d", (int) tors[i]->upstream_queue_stat[j]->max_val);
         }
+        printf("]\n");
 
-        int max_down_queue_len = 0;
-        for (int j = 0; j < MAX_HISTOGRAM_LEN; j++) {
-            int num_in_len = down_histogram[j];
-            if (num_in_len > 0) {
-                max_down_queue_len = j;
+        printf("Max Downstream Queue Lens at Tor %d:\n[", i);
+        for(int j = 0; j < NODES_PER_RACK; j++) {
+            if (j != 0) {
+                printf(", ");
             }
+            printf("%d", (int) tors[i]->downstream_queue_stat[j]->max_val);
         }
-
-        up_tor_max[i] = max_up_queue_len;
-        down_tor_max[i] = max_down_queue_len;
+        printf("]\n\n");
     }
-
-    printf("Max Upstream Queue Len at each ToR:\n[");
-    for(int i = 0; i < NUM_OF_TORS; i++) {
-        if (i != 0) {
-            printf(", ");
-        }
-        printf("%d", up_tor_max[i]);
-    }
-    printf("]\n");
-
-    printf("Max Downstream Queue Len at each ToR:\n[");
-    for(int i = 0; i < NUM_OF_TORS; i++) {
-        if (i != 0) {
-            printf(", ");
-        }
-        printf("%d", down_tor_max[i]);
-    }
-    printf("]\n");
-
-    free(up_tor_max);
-    free(down_tor_max);
-    printf("\n");
 }
 
 FILE * open_outfile(char * filename) {

@@ -24,6 +24,7 @@ OBJ = $(OBJDIR)/arraylist.o \
       $(OBJDIR)/routing_table.o \
       $(OBJDIR)/spine.o \
       $(OBJDIR)/system_stats.o \
+      $(OBJDIR)/timeseries.o \
       $(OBJDIR)/tor.o 
 
 default: all

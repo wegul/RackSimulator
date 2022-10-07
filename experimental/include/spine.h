@@ -6,17 +6,14 @@
 #include "packet.h"
 #include "links.h"
 #include "arraylist.h"
-
-typedef struct {
-    int64_t queue_len_histogram[MAX_HISTOGRAM_LEN];
-} spine_queue_stats_t;
+#include "timeseries.h"
 
 struct spine {
     int16_t spine_index;
     //packet storage datastructure
     buffer_t * pkt_buffer[NUM_OF_TORS];
     //stats datastructure
-    spine_queue_stats_t queue_stat;
+    timeseries_t * queue_stat[SPINE_PORT_COUNT];
 };
 typedef struct spine* spine_t;
 
