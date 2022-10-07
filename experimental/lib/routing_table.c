@@ -1,7 +1,4 @@
 #include "routing_table.h"
-#include "params.h"
-#include <stdio.h>
-#include <stdlib.h>
 
 int create_routing_table(rnode_t * routing_table) {
     int i;

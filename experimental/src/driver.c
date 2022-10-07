@@ -1,12 +1,12 @@
 #include "driver.h"
 
 // Default values for simulation
-static int pkt_size = 64; //in bytes
-static float link_bandwidth = 10; //in Gbps
+static int pkt_size = 1500; //in bytes
+static float link_bandwidth = 100; //in Gbps
 static float timeslot_len; //in ns
 
 int16_t header_overhead = 0;
-float per_hop_propagation_delay_in_ns = 0;
+float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
 
@@ -78,46 +78,46 @@ void work_per_timeslot()
             int16_t node_index = node->node_index;
 
             if ((node->active_flows)->num_elements > 0) {
-                for (int j = 0; j < (node->active_flows)->num_elements; j++) {
-                    flow_t * flow = buffer_peek(node->active_flows, j);
-                    if (flow->active == 1 || flow->timeslot <= curr_timeslot){
-                        int16_t src_node = flow->src;
-                        int16_t dst_node = flow->dst;
-                        int64_t flow_id = flow->flow_id;
-                        int64_t seq_num = node->seq_num[dst_node];
-                        packet_t pkt = create_packet(src_node, dst_node, flow_id, seq_num);
-                        node->seq_num[dst_node]++;
-                        if (flow->active == 0) {
-                            flowlist->active_flows++;
-                            flow->start_timeslot = curr_timeslot;
-                            total_flows_started++;
+                flow_t * flow = buffer_peek(node->active_flows, 0);
+                if (flow->active == 1 || flow->timeslot <= curr_timeslot){
+                    flow = buffer_get(node->active_flows);
+                    int16_t src_node = flow->src;
+                    int16_t dst_node = flow->dst;
+                    int64_t flow_id = flow->flow_id;
+                    int64_t seq_num = node->seq_num[dst_node];
+                    packet_t pkt = create_packet(src_node, dst_node, flow_id, seq_num);
+                    node->seq_num[dst_node]++;
+                    if (flow->active == 0) {
+                        flowlist->active_flows++;
+                        flow->start_timeslot = curr_timeslot;
+                        total_flows_started++;
 #ifdef DEBUG_DRIVER 
-                            printf("flow %d started\n", (int) flow_id);
-#endif
-                        }
-                        flow->active = 1;
-                        flow->pkts_sent++;
-
-                        if (flow->pkts_sent >= flow->flow_size) {
-                            buffer_remove(node->active_flows, j);
-                            flowlist->active_flows--;
-                            flow->active = 0;
-                            j--;
-#ifdef DEBUG_DRIVER
-                            printf("flow %d sending final packet\n", (int) flow_id);
-#endif
-                        }
-
-                        pkt->time_when_transmitted_from_src = curr_timeslot;
-                        int16_t dst_tor = node_index / NODES_PER_RACK;
-                        pkt->time_to_dequeue_from_link = curr_timeslot +
-                            per_hop_propagation_delay_in_timeslots;
-                        link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-#ifdef DEBUG_DRIVER
-                        printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
-                        print_packet(pkt);
+                        printf("flow %d started\n", (int) flow_id);
 #endif
                     }
+                    flow->active = 1;
+                    flow->pkts_sent++;
+
+                    if (flow->pkts_sent >= flow->flow_size) {
+                        flowlist->active_flows--;
+                        flow->active = 0;
+#ifdef DEBUG_DRIVER
+                        printf("flow %d sending final packet\n", (int) flow_id);
+#endif
+                    }
+                    else {
+                        buffer_put(node->active_flows, flow);
+                    }
+
+                    pkt->time_when_transmitted_from_src = curr_timeslot;
+                    int16_t dst_tor = node_index / NODES_PER_RACK;
+                    pkt->time_to_dequeue_from_link = curr_timeslot +
+                        per_hop_propagation_delay_in_timeslots;
+                    link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+#ifdef DEBUG_DRIVER
+                    printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
+                    print_packet(pkt);
+#endif
                 }
             }
         }
@@ -335,6 +335,7 @@ void work_per_timeslot()
 
         if (terminate0 || terminate1 || terminate2 || terminate3) {
             double curr_time = curr_timeslot * timeslot_len / 1e9;
+            printf("Finished in %d timeslots\n", (int) curr_timeslot);
             printf("Finished in %f seconds\n", curr_time);
             break;
         }

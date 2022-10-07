@@ -2,8 +2,9 @@
 #define __ROUTING_TABLE_H__
 
 #include <stdlib.h>
+#include <stdio.h>
+#include "params.h"
 
-#define RTABLE_SIZE 100
 
 typedef struct rnode {
     int addr;
