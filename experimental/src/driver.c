@@ -182,7 +182,7 @@ void work_per_timeslot()
                 int16_t src_host = (tor_index * TOR_PORT_COUNT_LOW) + tor_port;
                 packet_t pkt = (packet_t)
                     link_peek(links->host_to_tor_link[src_host][tor_index]);
-                if (pkt != NULL) {
+                if (pkt != NULL && pkt->time_to_dequeue_from_link == curr_timeslot) {
                     int spine_id = hash(tor->routing_table, pkt->flow_id);
                     pkt = (packet_t)
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
@@ -201,7 +201,7 @@ void work_per_timeslot()
                 int16_t src_spine = tor_port;
                 packet_t pkt = (packet_t)
                     link_peek(links->spine_to_tor_link[src_spine][tor_index]);
-                if (pkt != NULL) {
+                if (pkt != NULL && pkt->time_to_dequeue_from_link == curr_timeslot) {
                     pkt = (packet_t)
                         link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
                     if (pkt != NULL) {
@@ -229,7 +229,7 @@ void work_per_timeslot()
                 int16_t src_tor = spine_port;
                 packet_t pkt = (packet_t) link_peek
                     (links->tor_to_spine_link[src_tor][spine_index]);
-                if (pkt != NULL) {  
+                if (pkt != NULL && pkt->time_to_dequeue_from_link == curr_timeslot) {  
                     pkt = (packet_t) link_dequeue
                         (links->tor_to_spine_link[src_tor][spine_index]);
 #ifdef DEBUG_DRIVER
@@ -263,7 +263,7 @@ void work_per_timeslot()
             packet_t pkt = (packet_t)
                 link_peek(links->tor_to_host_link[src_tor][node_index]);
             
-            if (pkt != NULL) {
+            if (pkt != NULL && pkt->time_to_dequeue_from_link == curr_timeslot) {
                 assert(pkt->dst_node == node_index);
                 pkt = (packet_t)
                     link_dequeue(links->tor_to_host_link[src_tor][node_index]);
