@@ -64,3 +64,41 @@ void write_to_outfile(FILE * fp, flow_t * flow, int timeslot_len, int bandwidth)
 
     fprintf(fp, "%d,%d,%d,%d,%0.9f,%0.9f,%0f\n", flow_id, src, dst, flow_size, flow_completion, slowdown, tput);
 }
+
+FILE * open_timeseries_outfile(char * filename) {
+    FILE * timeslot_fp = fopen(filename, "w");
+    assert(timeslot_fp != NULL);
+    return timeslot_fp;
+}
+
+void write_to_timeseries_outfile(FILE * fp, spine_t * spines, tor_t * tors, int64_t final_timeslot, int64_t num_datapoints) {
+    int ts_per_datapoint = final_timeslot / num_datapoints;
+    if (ts_per_datapoint == 0) {
+        ts_per_datapoint = 1;
+    }
+
+    for (int i = 0; i < final_timeslot; i += ts_per_datapoint) {
+        for (int j = 0; j < NUM_OF_SPINES; j++) {
+            spine_t spine = spines[j];
+            for (int k = 0; k < SPINE_PORT_COUNT; k++) {
+                int len = (int) spine->queue_stat[k]->list[i];
+                fprintf(fp, "%d,", len);
+            }
+        }
+
+        for (int j = 0; j < NUM_OF_TORS; j++) {
+            tor_t tor = tors[j];
+            for(int k = 0; k < NUM_OF_SPINES; k++) {
+                int len = (int) tor->upstream_queue_stat[k]->list[i];
+                fprintf(fp, "%d,", len);
+            }
+
+            for (int k = 0; k < NODES_PER_RACK; k++) {
+                int len = tor->downstream_queue_stat[k]->list[i];
+                fprintf(fp, "%d,", len);
+            }
+        }
+
+        fprintf(fp, "\n");
+    }
+}

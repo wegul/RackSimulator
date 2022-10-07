@@ -10,6 +10,7 @@ function usage {
     echo '-n: run the exp till specified num of flows finished'
     echo '-m: run the exp till specified num of flows started'
     echo '-t: maximum number of timeslots to run'
+
     exit 1
 }
 
@@ -22,8 +23,9 @@ prop_delay=0
 numflowsfinish=5000
 numflowsstart=5000
 maxtimeslots=10000000
+numdatapoints=1000
 
-while getopts "f:b:c:h:d:n:m:t:rpa" OPTION
+while getopts "f:b:c:h:d:n:m:t:q:rpa" OPTION
 do
     case $OPTION in
         f) filepath=$OPTARG
@@ -42,6 +44,8 @@ do
             ;;
         t) maxtimeslots=$OPTARG
             ;;
+        q) numdatapoints=$OPTARG
+            ;;
         *) usage
             ;;
     esac
@@ -54,6 +58,6 @@ fi
 
 filename=$(basename "${filepath}") #extract the filename from the path
 
-echo -e "\n*** Running [./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}"] ***\n"
-./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}"
+echo -e "\n*** Running [./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}" -q "${numdatapoints}"] ***\n"
+./bin/driver -f "${filepath}" -b "${bandwidth}" -c "${pkt_size}" -h "${header_overhead}" -d "${prop_delay}" -n "${numflowsfinish}" -m "${numflowsstart}" -t "${maxtimeslots}" -q "${numdatapoints}"
 

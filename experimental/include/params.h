@@ -33,8 +33,8 @@
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
 #define OVERSUBSCRIPTION 1
-#define NUM_OF_RACKS 32
-#define NODES_PER_RACK 16
+#define NUM_OF_RACKS 16
+#define NODES_PER_RACK 32
 #define NUM_OF_NODES (NUM_OF_RACKS * NODES_PER_RACK)
 #define NUM_OF_SPINES (NODES_PER_RACK/OVERSUBSCRIPTION)
 #define SPINE_PORT_COUNT NUM_OF_RACKS

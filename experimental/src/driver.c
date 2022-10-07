@@ -9,6 +9,7 @@ int16_t header_overhead = 0;
 float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
+int num_datapoints = 1000;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
@@ -26,6 +27,7 @@ volatile int64_t max_timeslots = 1000000; // extern var
 
 // Output file
 FILE * out_fp = NULL;
+FILE * timeseries_fp = NULL;
 
 // Network
 node_t * nodes;
@@ -82,7 +84,17 @@ void work_per_timeslot()
                     int16_t dst_node = flow->dst;
                     int64_t flow_id = flow->flow_id;
                     int64_t seq_num = node->seq_num[dst_node];
-                    packet_t pkt = create_packet(src_node, dst_node, flow_id, seq_num);
+                    int64_t size = 0;
+
+                    int64_t flow_bytes_remaining = flow->flow_size - flow->bytes_sent;
+                    if (flow_bytes_remaining < 1500) {
+                        size = flow_bytes_remaining;
+                    }
+                    else {
+                        size = 1500;
+                    }
+
+                    packet_t pkt = create_packet(src_node, dst_node, flow_id, size, seq_num);
                     node->seq_num[dst_node]++;
                     if (flow->active == 0) {
                         flowlist->active_flows++;
@@ -94,6 +106,7 @@ void work_per_timeslot()
                     }
                     flow->active = 1;
                     flow->pkts_sent++;
+                    flow->bytes_sent += size;
 
                     if (flow->pkts_sent >= flow->flow_size) {
                         flowlist->active_flows--;
@@ -273,8 +286,10 @@ void work_per_timeslot()
                 flow_t * flow = flowlist->flows[pkt->flow_id];
                 assert(flow != NULL);
                 flow->pkts_received++;
+                flow->bytes_received += pkt->size;
 
                 if (flow->pkts_received == flow->flow_size) {
+                    assert(flow->bytes_sent == flow->bytes_received);
                     flow->active = 0;
                     flow->finished = 1;
                     flow->finish_timeslot = curr_timeslot;
@@ -351,8 +366,10 @@ void process_args(int argc, char ** argv) {
     char filename[500] = "";
     char out_filename[504] = "";
     char out_suffix[4] = ".out";
+    char timeseries_filename[515] = "";
+    char timeseries_suffix[15] = ".timeseries.csv";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -381,11 +398,16 @@ void process_args(int argc, char ** argv) {
                 max_timeslots = atoi(optarg);
                 printf("Stop experiment after %ld timeslots have finished\n", max_timeslots);
                 break;
+            case 'q':
+                num_datapoints = atoi(optarg);
+                printf("Writing %d queue length datapoints to timeseries.csv file\n", num_datapoints);
             case 'f': 
                 if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
                     strncpy(out_filename, filename, strlen(filename));
                     strncat(out_filename, out_suffix, 4);
+                    strncpy(timeseries_filename, filename, strlen(filename));
+                    strncat(timeseries_filename, timeseries_suffix, 15);
                 }
                 else
                     usage();
@@ -406,6 +428,9 @@ void process_args(int argc, char ** argv) {
 
     read_tracefile(filename);
     out_fp = open_outfile(out_filename);
+#ifdef WRITE_QUEUELENS
+    timeseries_fp = open_timeseries_outfile(timeseries_filename);
+#endif
 }
 
 void read_tracefile(char * filename) {
@@ -424,8 +449,8 @@ void read_tracefile(char * filename) {
         int flow_size_pkts = -1;
         int timeslot = -1;
         
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d", &flow_id, &src, &dst, &flow_size_bytes, &flow_size_pkts, &timeslot) == 6 ) {
-            initialize_flow(flow_id, src, dst, flow_size_pkts, timeslot);
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d", &flow_id, &src, &dst, &flow_size_bytes, &flow_size_pkts, &timeslot) == 6 && flow_id < MAX_FLOW_ID) {
+            initialize_flow(flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);
         }
         
         printf("Flows initialized\n");
@@ -434,26 +459,15 @@ void read_tracefile(char * filename) {
     return;
 }
 
-void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int timeslot) {
+void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int flow_size_bytes, int timeslot) {
     if (flow_id < MAX_FLOW_ID) {
-        flow_t * new_flow = create_flow(flow_id, flow_size_pkts, src, dst, timeslot);
+        flow_t * new_flow = create_flow(flow_id, flow_size_pkts, flow_size_bytes, src, dst, timeslot);
         add_flow(flowlist, new_flow);
         buffer_put(nodes[src]->active_flows, new_flow);
 #ifdef DEBUG_DRIVER
         printf("initialized flow %d src %d dst %d flow_size %d ts %d\n", flow_id, src, dst, flow_size_pkts, timeslot);
 #endif
     }
-}
-
-void initialize_flows() {
-    flowlist = create_flowlist();
-    flow_t * f1 = create_flow(0, 1, 20, 65, 0);
-    flow_t * f2 = create_flow(1, 1, 99, 1, 0);
-    add_flow(flowlist, f1);
-    add_flow(flowlist, f2);
-    buffer_put(nodes[20]->active_flows, f1);
-    buffer_put(nodes[99]->active_flows, f2);
-    printf("Flows initialized\n");
 }
 
 void free_flows() {
@@ -521,14 +535,19 @@ int main(int argc, char** argv) {
 
     initialize_network();
     process_args(argc, argv);
-    //initialize_flows();
     
     work_per_timeslot();
     print_system_stats(spines, tors);
+#ifdef WRITE_QUEUELENS
+    write_to_timeseries_outfile(timeseries_fp, spines, tors, curr_timeslot, num_datapoints);
+#endif
 
     free_flows();
     free_network();
     fclose(out_fp);
+#ifdef WRITE_QUEUELENS
+    fclose(timeseries_fp);
+#endif
 
     printf("Finished execution\n");
 

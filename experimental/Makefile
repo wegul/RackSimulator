@@ -10,6 +10,7 @@ CFLAGS = -std=gnu99 -g -O3 -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 
 #CFLAGS += -DDEBUG_DRIVER
+CFLAGS += -DWRITE_QUEUELENS
 
 INCLUDE = $(INCLUDEDIR)/*.h
 
