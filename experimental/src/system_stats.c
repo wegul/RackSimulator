@@ -41,7 +41,9 @@ void print_tor_stats(tor_t * tors) {
 }
 
 FILE * open_outfile(char * filename) {
-    FILE * out_fp = fopen(filename, "w");
+    char out_filename[520] = "out/";
+    strncat(out_filename, filename, 500);
+    FILE * out_fp = fopen(out_filename, "w");
     assert(out_fp != NULL);
     fprintf(out_fp, "Flow ID,Src,Dst,Flow Size(pkts),Flow Completion Time(sec),Slowdown(sec),Throughput(Gbps)\n");
     return out_fp;
@@ -66,7 +68,9 @@ void write_to_outfile(FILE * fp, flow_t * flow, int timeslot_len, int bandwidth)
 }
 
 FILE * open_timeseries_outfile(char * filename) {
-    FILE * timeslot_fp = fopen(filename, "w");
+    char out_filename[520] = "out/";
+    strncat(out_filename, filename, 500);
+    FILE * timeslot_fp = fopen(out_filename, "w");
     assert(timeslot_fp != NULL);
     return timeslot_fp;
 }

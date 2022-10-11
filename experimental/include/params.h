@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
+#include <dirent.h>
 
 #define NULL_TEST(ptr, line_num) \
     if (ptr == NULL) \

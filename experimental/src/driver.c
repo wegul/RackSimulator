@@ -9,6 +9,7 @@ int16_t header_overhead = 0;
 float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
+int packet_counter = 0;
 int num_datapoints = 100000;
 
 static volatile int8_t terminate0 = 0;
@@ -25,9 +26,11 @@ int64_t num_of_flows_to_start = 500000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 1000000; // extern var
 
-// Output file
+// Output files
 FILE * out_fp = NULL;
 FILE * timeseries_fp = NULL;
+FILE * spine_outfiles[NUM_OF_SPINES];
+FILE * tor_outfiles[NUM_OF_RACKS];
 
 // Network
 node_t * nodes;
@@ -94,7 +97,8 @@ void work_per_timeslot()
                         size = 1500;
                     }
 
-                    packet_t pkt = create_packet(src_node, dst_node, flow_id, size, seq_num);
+                    packet_t pkt = create_packet(src_node, dst_node, flow_id, size, seq_num, packet_counter);
+                    packet_counter++;
                     node->seq_num[dst_node]++;
                     if (flow->active == 0) {
                         flowlist->active_flows++;
@@ -204,6 +208,9 @@ void work_per_timeslot()
 #ifdef DEBUG_DRIVER
                         printf("Tor %d recv pkt from host %d\n", i, tor_port);
 #endif
+#ifdef RECORD_PACKETS
+                        fprintf(tor_outfiles[i], "%d, %d, %d, up\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) tor_port);
+#endif
                     }
                 }
             }
@@ -222,6 +229,9 @@ void work_per_timeslot()
                         buffer_put(tor->downstream_pkt_buffer[node_index], pkt);
 #ifdef DEBUG_DRIVER
                         printf("Tor %d recv pkt from spine %d on ts %d\n", i, tor_port, (int) curr_timeslot);
+#endif
+#ifdef RECORD_PACKETS
+                        fprintf(tor_outfiles[i], "%d, %d, %d, down\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) tor_port);
 #endif
                     }
                 }
@@ -247,6 +257,9 @@ void work_per_timeslot()
                         (links->tor_to_spine_link[src_tor][spine_index]);
 #ifdef DEBUG_DRIVER
                     printf("Spine %d recv pkt from ToR %d\n", spine_index, src_tor);
+#endif
+#ifdef RECORD_PACKETS
+                    fprintf(spine_outfiles[i], "%d, %d, %d\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) spine_port);
 #endif
                     //enq packet in the virtual queue
                     int16_t dst_host = pkt->dst_node;
@@ -408,6 +421,10 @@ void process_args(int argc, char ** argv) {
                     strncat(out_filename, out_suffix, 4);
                     strncpy(timeseries_filename, filename, strlen(filename));
                     strncat(timeseries_filename, timeseries_suffix, 15);
+#ifdef RECORD_PACKETS
+                    printf("Writing switch packet data to switch.csv files\n");
+                    open_switch_outfiles(filename);
+#endif
                 }
                 else
                     usage();
@@ -425,6 +442,18 @@ void process_args(int argc, char ** argv) {
     printf("Per hop propagation delay: %f ns (%d timeslots)\n",
         per_hop_propagation_delay_in_ns, per_hop_propagation_delay_in_timeslots);
     printf("\n");
+
+    DIR * dir = opendir("out/");
+    if (dir) {
+        closedir(dir);
+    }
+    else if (ENOENT == errno) {
+        mkdir("out/", 0777);
+    }
+    else {
+        printf("Could not open out directory.");
+        exit(1);
+    }
 
     read_tracefile(filename);
     out_fp = open_outfile(out_filename);
@@ -530,6 +559,50 @@ void free_network() {
     printf("Freed network\n");
 }
 
+void open_switch_outfiles(char * base_filename) {
+    char csv_suffix[4] = ".csv";
+    for (int i = 0; i < NUM_OF_SPINES; i++) {
+        char filename[520] = "out/";
+        char spine_suffix[6] = ".spine";
+        char spine_id[5];
+        sprintf(spine_id, "%d", i);
+        strncat(filename, base_filename, 500);
+        strncat(filename, spine_suffix, 6);
+        strncat(filename, spine_id, 5);
+        strncat(filename, csv_suffix, 4);
+        spine_outfiles[i] = fopen(filename, "w");
+        fprintf(spine_outfiles[i], "pkt_id, timeslot, port\n");
+    }
+
+    for (int i = 0; i < NUM_OF_RACKS; i++) {
+        char filename[520] = "out/";
+        char tor_suffix[4] = ".tor";
+        char tor_id[5];
+        sprintf(tor_id, "%d", i);
+        strncat(filename, base_filename, 500);
+        strncat(filename, tor_suffix, 4);
+        strncat(filename, tor_id, 5);
+        strncat(filename, csv_suffix, 4);
+        tor_outfiles[i] = fopen(filename, "w");
+        fprintf(tor_outfiles[i], "pkt_id, timeslot, port, direction\n");
+    }
+}
+
+void close_outfiles() {
+    fclose(out_fp);
+#ifdef WRITE_QUEUELENS
+    fclose(timeseries_fp);
+#endif
+#ifdef RECORD_PACKETS
+    for (int i = 0; i < NUM_OF_SPINES; i++) {
+        fclose(spine_outfiles[i]);
+    }
+    for (int i = 0; i < NUM_OF_RACKS; i++) {
+        fclose(tor_outfiles[i]);
+    }
+#endif
+}
+
 int main(int argc, char** argv) {
     srand((unsigned int)time(NULL));
 
@@ -544,10 +617,7 @@ int main(int argc, char** argv) {
 
     free_flows();
     free_network();
-    fclose(out_fp);
-#ifdef WRITE_QUEUELENS
-    fclose(timeseries_fp);
-#endif
+    close_outfiles();
 
     printf("Finished execution\n");
 

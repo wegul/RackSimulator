@@ -14,10 +14,11 @@ struct packet {
     int64_t time_to_dequeue_from_link; //simulating propagation delay
 
     int64_t seq_num;
+    int64_t pkt_id;
 };
 typedef struct packet* packet_t;
 
-packet_t create_packet(int16_t, int16_t, int64_t, int64_t, int64_t);
+packet_t create_packet(int16_t, int16_t, int64_t, int64_t, int64_t, int64_t);
 void print_packet(packet_t);
 void free_packet(packet_t);
 

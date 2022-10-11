@@ -8,3 +8,4 @@ simulation/trace*
 experimental/bin
 experimental/obj
 experimental/trace*
+experimental/out/trace*

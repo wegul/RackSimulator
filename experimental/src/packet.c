@@ -1,7 +1,7 @@
 #include "packet.h"
 
 packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int64_t size,
-        int64_t seq_num)
+        int64_t seq_num, int64_t pkt_id)
 {
     packet_t self = (packet_t) malloc(sizeof(struct packet));
     MALLOC_TEST(self, __LINE__);
@@ -10,6 +10,7 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     self->flow_id = flow_id;
     self->size = size;
     self->seq_num = seq_num;
+    self->pkt_id = pkt_id;
     return self;
 }
 
