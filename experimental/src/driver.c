@@ -9,7 +9,7 @@ int16_t header_overhead = 0;
 float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
-int num_datapoints = 1000;
+int num_datapoints = 100000;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
