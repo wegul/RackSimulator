@@ -24,6 +24,7 @@ typedef struct buffer {
 } buffer_t;
 
 buffer_t * create_buffer(int32_t);
+int8_t buffer_insert(buffer_t *, void *, int32_t);
 int8_t buffer_put(buffer_t *, void*);
 void * buffer_get(buffer_t *);
 void * buffer_peek(buffer_t *, int32_t);

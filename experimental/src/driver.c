@@ -41,7 +41,25 @@ flowlist_t * flowlist;
 
 void work_per_timeslot()
 {
+    int flow_idx = 0;
     while (1) {
+/*---------------------------------------------------------------------------*/
+                                  //Activate inactive flows
+/*---------------------------------------------------------------------------*/
+        for (; flow_idx < flowlist->num_flows; flow_idx++) {
+            flow_t * flow = flowlist->flows[flow_idx];
+            if (flow == NULL || flow->timeslot > curr_timeslot) {
+                break;
+            }
+            else if (flow->timeslot == curr_timeslot) {
+#ifdef DEBUG_DRIVER
+                printf("%d: flow %d has been enabled\n", (int) curr_timeslot, (int) flow->flow_id);
+#endif
+                int src = flow->src;
+                buffer_put(nodes[src]->active_flows, flow);
+            }
+        }
+
 /*---------------------------------------------------------------------------*/
                                   //SPINE -- SEND
 /*---------------------------------------------------------------------------*/
@@ -65,7 +83,7 @@ void work_per_timeslot()
                         per_hop_propagation_delay_in_timeslots;
                     link_enqueue(links->spine_to_tor_link[spine_index][k], pkt);
 #ifdef DEBUG_DRIVER
-                    printf("spine %d sent pkt to ToR %d on ts %d\n", i, k, (int) curr_timeslot);
+                    printf("%d: spine %d sent pkt to ToR %d\n", (int) curr_timeslot, i, k);
 #endif
                 }
             }
@@ -89,7 +107,7 @@ void work_per_timeslot()
                     int64_t seq_num = node->seq_num[dst_node];
                     int64_t size = 0;
 
-                    int64_t flow_bytes_remaining = flow->flow_size - flow->bytes_sent;
+                    int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
                     if (flow_bytes_remaining < 1500) {
                         size = flow_bytes_remaining;
                     }
@@ -105,7 +123,7 @@ void work_per_timeslot()
                         flow->start_timeslot = curr_timeslot;
                         total_flows_started++;
 #ifdef DEBUG_DRIVER 
-                        printf("flow %d started\n", (int) flow_id);
+                        printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
 #endif
                     }
                     flow->active = 1;
@@ -116,7 +134,7 @@ void work_per_timeslot()
                         flowlist->active_flows--;
                         flow->active = 0;
 #ifdef DEBUG_DRIVER
-                        printf("flow %d sending final packet\n", (int) flow_id);
+                        printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
 #endif
                     }
                     else {
@@ -129,7 +147,7 @@ void work_per_timeslot()
                         per_hop_propagation_delay_in_timeslots;
                     link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
 #ifdef DEBUG_DRIVER
-                    printf("host %d created pkt at time %d\n", i, (int) curr_timeslot);
+                    printf("%d: host %d created and sent pkt to ToR %d at time %d\n", (int) curr_timeslot, i, (int) dst_tor, (int) curr_timeslot);
                     print_packet(pkt);
 #endif
                 }
@@ -164,7 +182,7 @@ void work_per_timeslot()
                         per_hop_propagation_delay_in_timeslots; 
                     link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
 #ifdef DEBUG_DRIVER
-                    printf("ToR %d sent pkt to spine %d\n", i, tor_port);
+                    printf("%d: ToR %d sent pkt to spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
                 }
             }
@@ -178,7 +196,7 @@ void work_per_timeslot()
                         per_hop_propagation_delay_in_timeslots;
                     link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
 #ifdef DEBUG_DRIVER
-                    printf("ToR %d sent pkt to host %d\n", i, dst_host);
+                    printf("%d: ToR %d sent pkt to host %d\n", (int) curr_timeslot, i, dst_host);
                     print_packet(pkt);
 #endif
                 }
@@ -206,7 +224,7 @@ void work_per_timeslot()
                     if (pkt != NULL) {
                         buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
 #ifdef DEBUG_DRIVER
-                        printf("Tor %d recv pkt from host %d\n", i, tor_port);
+                        printf("%d: Tor %d recv pkt from host %d\n", (int) curr_timeslot, i, src_host);
 #endif
 #ifdef RECORD_PACKETS
                         fprintf(tor_outfiles[i], "%d, %d, %d, up\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) tor_port);
@@ -228,7 +246,7 @@ void work_per_timeslot()
                         int node_index = pkt->dst_node % NODES_PER_RACK;
                         buffer_put(tor->downstream_pkt_buffer[node_index], pkt);
 #ifdef DEBUG_DRIVER
-                        printf("Tor %d recv pkt from spine %d on ts %d\n", i, tor_port, (int) curr_timeslot);
+                        printf("%d: Tor %d recv pkt from spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
 #ifdef RECORD_PACKETS
                         fprintf(tor_outfiles[i], "%d, %d, %d, down\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) tor_port);
@@ -256,7 +274,7 @@ void work_per_timeslot()
                     pkt = (packet_t) link_dequeue
                         (links->tor_to_spine_link[src_tor][spine_index]);
 #ifdef DEBUG_DRIVER
-                    printf("Spine %d recv pkt from ToR %d\n", spine_index, src_tor);
+                    printf("%d: Spine %d recv pkt from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
 #endif
 #ifdef RECORD_PACKETS
                     fprintf(spine_outfiles[i], "%d, %d, %d\n", (int) pkt->pkt_id, (int) curr_timeslot, (int) spine_port);
@@ -294,7 +312,7 @@ void work_per_timeslot()
                 pkt = (packet_t)
                     link_dequeue(links->tor_to_host_link[src_tor][node_index]);
 #ifdef DEBUG_DRIVER
-                printf("host %d received packet from ToR %d\n", node_index, src_tor);
+                printf("%d: host %d received packet from ToR %d\n", (int) curr_timeslot, node_index, src_tor);
 #endif
                 flow_t * flow = flowlist->flows[pkt->flow_id];
                 assert(flow != NULL);
@@ -309,7 +327,7 @@ void work_per_timeslot()
                     num_of_flows_finished++;
                     write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
 #ifdef DEBUG_DRIVER
-                    printf("Flow %d finished\n", (int) flow->flow_id);
+                    printf("%d: Flow %d finished\n", (int) curr_timeslot, (int) flow->flow_id);
 #endif
                 }
                 free_packet(pkt);
@@ -492,9 +510,8 @@ void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int flow
     if (flow_id < MAX_FLOW_ID) {
         flow_t * new_flow = create_flow(flow_id, flow_size_pkts, flow_size_bytes, src, dst, timeslot);
         add_flow(flowlist, new_flow);
-        buffer_put(nodes[src]->active_flows, new_flow);
 #ifdef DEBUG_DRIVER
-        printf("initialized flow %d src %d dst %d flow_size %d ts %d\n", flow_id, src, dst, flow_size_pkts, timeslot);
+        printf("initialized flow %d src %d dst %d flow_size %d bytes %d ts %d\n", flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);
 #endif
     }
 }

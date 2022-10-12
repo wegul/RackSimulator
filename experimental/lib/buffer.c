@@ -18,8 +18,8 @@ buffer_t * create_buffer(int32_t size)
     return self;
 }
 
-int8_t buffer_put(buffer_t * self, void * element) {
-    if (self != NULL && element != NULL) {
+int8_t buffer_insert(buffer_t * self, void * element, int32_t index) {
+    if (self != NULL && element != NULL && index <= self->num_elements) {
         self->num_elements++;
         if (self->num_elements >= self->size) {
             self->size *= 2;
@@ -35,10 +35,18 @@ int8_t buffer_put(buffer_t * self, void * element) {
             self->buffer = new_buffer;
             //self->buffer = (void**) realloc(self->buffer, self->size * sizeof(void*));
         }
-        self->buffer[self->num_elements-1] = element;
+        for (int i = self->num_elements - 1; i > index; i--) {
+            self->buffer[i] = self->buffer[i-1];
+        }
+        self->buffer[index] = element;
         return 0;
     }
     return -1;
+
+}
+
+int8_t buffer_put(buffer_t * self, void * element) {
+    return buffer_insert(self, element, self->num_elements);
 }
 
 void * buffer_remove(buffer_t * self, int32_t index) {
@@ -66,8 +74,6 @@ void * buffer_peek(buffer_t * self, int32_t index) {
     }
     return element;
 }
-
-
 
 void buffer_clear(buffer_t * self) {
     if (self != NULL && self->buffer != NULL) {
