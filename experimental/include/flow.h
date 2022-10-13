@@ -15,6 +15,7 @@ typedef struct flow {
     int64_t timeslot;
     int64_t start_timeslot;
     int64_t finish_timeslot;
+    int64_t timeslots_active;
     int64_t pkts_sent;
     int64_t pkts_received;
     int64_t bytes_sent;

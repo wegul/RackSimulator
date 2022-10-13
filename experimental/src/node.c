@@ -13,7 +13,6 @@ node_t create_node(int16_t node_index)
         self->seq_num[i] = 0;
         self->curr_seq_num[i] = 0;
     }
-
     return self;
 }
 

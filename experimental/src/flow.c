@@ -13,6 +13,7 @@ flow_t * create_flow(int64_t flow_id, int64_t flow_size, int64_t flow_size_bytes
     self->timeslot = timeslot;
     self->start_timeslot = 0;
     self->finish_timeslot = 0;
+    self->timeslots_active = 0;
     self->pkts_sent = 0;
     self->pkts_received = 0;
     self->bytes_sent = 0;

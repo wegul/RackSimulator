@@ -129,6 +129,7 @@ void work_per_timeslot()
                     flow->active = 1;
                     flow->pkts_sent++;
                     flow->bytes_sent += size;
+                    flow->timeslots_active++;
 
                     if (flow->pkts_sent >= flow->flow_size) {
                         flowlist->active_flows--;

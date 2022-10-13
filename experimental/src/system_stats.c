@@ -45,7 +45,7 @@ FILE * open_outfile(char * filename) {
     strncat(out_filename, filename, 500);
     FILE * out_fp = fopen(out_filename, "w");
     assert(out_fp != NULL);
-    fprintf(out_fp, "Flow ID,Src,Dst,Flow Size(pkts),Flow Completion Time(sec),Slowdown(sec),Throughput(Gbps)\n");
+    fprintf(out_fp, "Flow ID,Src,Dst,Flow Size(pkts),Flow Completion Time(sec),Throughput(Gbps)\n");
     return out_fp;
 }
 
@@ -58,13 +58,9 @@ void write_to_outfile(FILE * fp, flow_t * flow, int timeslot_len, int bandwidth)
     int dst = (int) flow->dst;
     int flow_size = (int) flow->flow_size;
     double flow_completion = (double) flow->finish_timeslot * sec_per_timeslot;
-    int timeslots_real = flow->finish_timeslot - flow->timeslot;
-    int timeslots_processing = flow->finish_timeslot - flow->start_timeslot;
-    int timeslots_ideal = flow->flow_size + 2;
-    double slowdown = (double) (timeslots_real - timeslots_ideal) * sec_per_timeslot;
-    double tput = (double) bandwidth * ((timeslots_ideal / timeslots_processing));
+    double tput = (double) flow->bytes_received * 8 / (flow->timeslots_active * timeslot_len * 1.0);
 
-    fprintf(fp, "%d,%d,%d,%d,%0.9f,%0.9f,%0f\n", flow_id, src, dst, flow_size, flow_completion, slowdown, tput);
+    fprintf(fp, "%d,%d,%d,%d,%0.9f,%.0f\n", flow_id, src, dst, flow_size, flow_completion, tput);
 }
 
 FILE * open_timeseries_outfile(char * filename) {
