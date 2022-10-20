@@ -114,43 +114,44 @@ void work_per_timeslot()
                     else {
                         size = 1500;
                     }
-
-                    packet_t pkt = create_packet(src_node, dst_node, flow_id, size, seq_num, packet_counter);
-                    packet_counter++;
-                    node->seq_num[dst_node]++;
-                    if (flow->active == 0) {
-                        flowlist->active_flows++;
-                        flow->start_timeslot = curr_timeslot;
-                        total_flows_started++;
+                    if (size > 0) {
+                        packet_t pkt = create_packet(src_node, dst_node, flow_id, size, seq_num, packet_counter);
+                        packet_counter++;
+                        node->seq_num[dst_node] += size;
+                        if (flow->active == 0) {
+                            flowlist->active_flows++;
+                            flow->start_timeslot = curr_timeslot;
+                            total_flows_started++;
 #ifdef DEBUG_DRIVER 
-                        printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
+                            printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
 #endif
-                    }
-                    flow->active = 1;
-                    flow->pkts_sent++;
-                    flow->bytes_sent += size;
-                    flow->timeslots_active++;
+                        }
+                        flow->active = 1;
+                        flow->pkts_sent++;
+                        flow->bytes_sent += size;
+                        flow->timeslots_active++;
 
-                    if (flow->pkts_sent >= flow->flow_size) {
-                        flowlist->active_flows--;
-                        flow->active = 0;
+                        if (flow->pkts_sent >= flow->flow_size) {
+                            flow->active = 0;
+                            flowlist->active_flows--;
 #ifdef DEBUG_DRIVER
-                        printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
+                            printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
 #endif
-                    }
-                    else {
-                        buffer_put(node->active_flows, flow);
-                    }
+                        }
+                        else {
+                            buffer_put(node->active_flows, flow);
+                        }
 
-                    pkt->time_when_transmitted_from_src = curr_timeslot;
-                    int16_t dst_tor = node_index / NODES_PER_RACK;
-                    pkt->time_to_dequeue_from_link = curr_timeslot +
-                        per_hop_propagation_delay_in_timeslots;
-                    link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+                        pkt->time_when_transmitted_from_src = curr_timeslot;
+                        int16_t dst_tor = node_index / NODES_PER_RACK;
+                        pkt->time_to_dequeue_from_link = curr_timeslot +
+                            per_hop_propagation_delay_in_timeslots;
+                        link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
 #ifdef DEBUG_DRIVER
-                    printf("%d: host %d created and sent pkt to ToR %d at time %d\n", (int) curr_timeslot, i, (int) dst_tor, (int) curr_timeslot);
-                    print_packet(pkt);
+                        printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
+                        print_packet(pkt);
 #endif
+                    }
                 }
             }
         }
@@ -224,6 +225,11 @@ void work_per_timeslot()
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
                     if (pkt != NULL) {
                         buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
+                        // DCTCP: Mark packet when adding packet exceeds ECN cutoff
+                        if (tor->upstream_pkt_buffer[spine_id]->num_elements > ECN_CUTOFF) {
+                            pkt->ecn_flag = 1;
+                        }
+
 #ifdef DEBUG_DRIVER
                         printf("%d: Tor %d recv pkt from host %d\n", (int) curr_timeslot, i, src_host);
 #endif
@@ -246,6 +252,10 @@ void work_per_timeslot()
                     if (pkt != NULL) {
                         int node_index = pkt->dst_node % NODES_PER_RACK;
                         buffer_put(tor->downstream_pkt_buffer[node_index], pkt);
+                        // DCTCP: Mark packet when adding packet exceeds ECN cutoff
+                        if (tor->downstream_pkt_buffer[node_index]->num_elements > ECN_CUTOFF) {
+                            pkt->ecn_flag = 1;
+                        }
 #ifdef DEBUG_DRIVER
                         printf("%d: Tor %d recv pkt from spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
@@ -287,6 +297,11 @@ void work_per_timeslot()
                         pkt->time_when_added_to_spine_queue = curr_timeslot;
                         assert(buffer_put(spine->pkt_buffer[dst_tor], pkt)                                                                                                                                                                                                                                        
                                 != -1);
+                        // DCTCP: Mark packet when adding packet exceeds ECN cutoff
+                        if (spine->pkt_buffer[dst_tor]->num_elements > ECN_CUTOFF) {
+                            pkt->ecn_flag = 1;
+                        }
+
                         if (dst_host == -1) {
                             free_packet(pkt);
                         }
@@ -312,25 +327,70 @@ void work_per_timeslot()
                 assert(pkt->dst_node == node_index);
                 pkt = (packet_t)
                     link_dequeue(links->tor_to_host_link[src_tor][node_index]);
+                // Data Packet
+                if (pkt->control_flag == 0) {
 #ifdef DEBUG_DRIVER
-                printf("%d: host %d received packet from ToR %d\n", (int) curr_timeslot, node_index, src_tor);
+                    printf("%d: host %d received data packet from ToR %d\n", (int) curr_timeslot, node_index, src_tor);
 #endif
-                flow_t * flow = flowlist->flows[pkt->flow_id];
-                assert(flow != NULL);
-                flow->pkts_received++;
-                flow->bytes_received += pkt->size;
+                    // Create ACK packet
+                    if (pkt->seq_num == node->ack_num[pkt->src_node]) {
+                        node->ack_num[pkt->src_node] = pkt->seq_num + pkt->size;
+                    }
+                    packet_t ack = ack_packet(pkt, node->ack_num[pkt->src_node]);
+                    // Enqueue ACK packet
+                    ack->time_when_transmitted_from_src = curr_timeslot;
+                    int16_t dst_tor = node_index / NODES_PER_RACK;
+                    ack->time_to_dequeue_from_link = curr_timeslot +
+                        per_hop_propagation_delay_in_timeslots;
+                    link_enqueue(links->host_to_tor_link[node_index][dst_tor], ack);
+#ifdef DEBUG_DRIVER
+                    printf("%d: host %d created and sent ACK %d to ToR %d\n", (int) curr_timeslot, i, (int) ack->ack_num, (int) dst_tor);
+#endif
 
-                if (flow->pkts_received == flow->flow_size) {
-                    assert(flow->bytes_sent == flow->bytes_received);
-                    flow->active = 0;
-                    flow->finished = 1;
-                    flow->finish_timeslot = curr_timeslot;
-                    num_of_flows_finished++;
-                    write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
+                    // Update flow
+                    flow_t * flow = flowlist->flows[pkt->flow_id];
+                    assert(flow != NULL);
+                    flow->pkts_received++;
+                    flow->bytes_received += pkt->size;
+
+                    if (flow->pkts_received == flow->flow_size) {
+                        assert(flow->bytes_sent == flow->bytes_received);
+                        flow->active = 0;
+                        flow->finished = 1;
+                        flow->finish_timeslot = curr_timeslot;
+                        num_of_flows_finished++;
+                        write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
 #ifdef DEBUG_DRIVER
-                    printf("%d: Flow %d finished\n", (int) curr_timeslot, (int) flow->flow_id);
+                        printf("%d: Flow %d finished\n", (int) curr_timeslot, (int) flow->flow_id);
 #endif
+                    }
                 }
+                // Control Packet
+                else {
+#ifdef DEBUG_DRIVER
+                    printf("%d: host %d received control packet from ToR %d\n", (int) curr_timeslot, node_index, src_tor);
+#endif
+                    // Check ECN flag
+                    track_ecn(node, pkt->src_node, pkt->ecn_flag);
+
+                    // Check ACK value
+                    if (pkt->ack_num > node->last_acked[pkt->src_node]){
+                        node->last_acked[pkt->src_node] = pkt->ack_num;
+                    }
+                    else {
+                        node->dup_acks[pkt->src_node]++;
+                        // If 3 duplicate ACKs received, lower cwnd based on queueing delays
+                        if (node->dup_acks[pkt->src_node] > 2) {
+                            update_cwnd_3_dup(node, pkt->src_node);
+                            node->dup_acks[pkt->src_node] = 0;
+#ifdef DEBUG_DRIVER
+                            printf("%d: host %d received 3 duplicate ACKs, cwnd has been lowered\n", (int) curr_timeslot, node_index);
+#endif
+                        }
+                    }
+
+                }
+
                 free_packet(pkt);
             }
         }
