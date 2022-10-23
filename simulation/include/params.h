@@ -51,10 +51,12 @@
 
 #define MAX_FLOW_ID 100000
 #define RTABLE_SIZE MAX_FLOW_ID
-#define ECN_CUTOFF 40
-#define ECN_WIDTH 10
+#define ECN_CUTOFF_TOR_UP 38
+#define ECN_CUTOFF_TOR_DOWN 70
+#define ECN_CUTOFF_SPINE 56
+#define ECN_WIDTH 8
 #define MSS 1500
-#define RTT 8
+#define SSTHRESH_START 8
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;

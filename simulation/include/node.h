@@ -11,13 +11,14 @@ struct node {
 
     buffer_t * active_flows;
     
-    int64_t seq_num[NUM_OF_NODES]; //to be put into the packets
-    int64_t ack_num[NUM_OF_NODES];
-    int64_t last_acked[NUM_OF_NODES];
-    int16_t dup_acks[NUM_OF_NODES];
-    int16_t ecn_marks[NUM_OF_NODES][ECN_WIDTH];
-    int16_t ecn_idx[NUM_OF_NODES];
-    int64_t cwnd[NUM_OF_NODES]; // Current congestion window size in MSS
+    int64_t seq_num[MAX_FLOW_ID]; //to be put into the packets
+    int64_t ack_num[MAX_FLOW_ID];
+    int64_t last_acked[MAX_FLOW_ID];
+    int16_t ecn_marks[MAX_FLOW_ID][ECN_WIDTH];
+    int16_t ecn_idx[MAX_FLOW_ID];
+    int64_t cwnd[MAX_FLOW_ID]; // Current congestion window size in MSS
+    int64_t acks_since_last_cwnd_increase[MAX_FLOW_ID]; // When CWND acks are received, cwnd can be incrememented
+    int64_t ssthresh[MAX_FLOW_ID]; // Slow Start Threshold
 };
 
 typedef struct node* node_t;
@@ -26,7 +27,6 @@ extern node_t* nodes;
 
 node_t create_node(int16_t);
 void track_ecn(node_t, int16_t, int16_t);
-void update_cwnd_3_dup(node_t self, int16_t);
 void free_node(node_t);
 
 #endif

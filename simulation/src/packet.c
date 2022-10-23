@@ -10,6 +10,7 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     self->flow_id = flow_id;
     self->size = size;
     self->seq_num = seq_num;
+    self->ack_num = 0;
     self->pkt_id = pkt_id;
     self->control_flag = 0;
     self->ecn_flag = 0;
@@ -23,6 +24,7 @@ packet_t ack_packet(packet_t pkt, int64_t ack_num) {
     ack->dst_node = pkt->src_node;
     ack->flow_id = pkt->flow_id;
     ack->size = 0;
+    ack->seq_num = pkt->seq_num;
     ack->ack_num = ack_num;
     ack->pkt_id = -1;
     ack->control_flag = 1;
@@ -31,7 +33,7 @@ packet_t ack_packet(packet_t pkt, int64_t ack_num) {
 }
 
 void print_packet(packet_t self) {
-    printf("pkt: src %d dst %d flow %d size %d seq %d\n", (int) self->src_node, (int) self->dst_node, (int) self->flow_id, (int) self->size, (int) self->seq_num);
+    printf("pkt: src %d dst %d flow %d size %d seq %d ack %d ctrl %d\n", (int) self->src_node, (int) self->dst_node, (int) self->flow_id, (int) self->size, (int) self->seq_num, (int) self->ack_num, (int) self->control_flag);
 }
 
 void free_packet(packet_t self)

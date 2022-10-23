@@ -56,3 +56,23 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor)
 
     return pkt;
 }
+
+int64_t tor_up_buffer_bytes(tor_t tor, int port)
+{
+    int64_t bytes = 0;
+    for (int i = 0; i < tor->upstream_pkt_buffer[port]->num_elements; i++) {
+        packet_t pkt = buffer_peek(tor->upstream_pkt_buffer[port], i);
+        bytes += pkt->size;
+    }
+    return bytes;
+}
+
+int64_t tor_down_buffer_bytes(tor_t tor, int port)
+{
+    int64_t bytes = 0;
+    for (int i = 0; i < tor->downstream_pkt_buffer[port]->num_elements; i++) {
+        packet_t pkt = buffer_peek(tor->downstream_pkt_buffer[port], i);
+        bytes += pkt->size;
+    }
+    return bytes;
+}

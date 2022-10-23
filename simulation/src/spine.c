@@ -38,3 +38,13 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num)
 
     return pkt;
 }
+
+int64_t spine_buffer_bytes(spine_t spine, int port)
+{
+    int64_t bytes = 0;
+    for (int i = 0; i < spine->pkt_buffer[port]->num_elements; i++) {
+        packet_t pkt = buffer_peek(spine->pkt_buffer[port], i);
+        bytes += pkt->size;
+    }
+    return bytes;
+}

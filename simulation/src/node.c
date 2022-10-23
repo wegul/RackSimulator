@@ -9,41 +9,71 @@ node_t create_node(int16_t node_index)
     
     self->active_flows = create_buffer(MAX_FLOW_ID);
 
-    for (int i = 0; i < NUM_OF_NODES; ++i) {
+    for (int i = 0; i < MAX_FLOW_ID; ++i) {
         self->seq_num[i] = 0;
         self->ack_num[i] = 0;
         self->last_acked[i] = 0;
-        self->dup_acks[i] = 0;
         for (int j = 0; j < ECN_WIDTH; j++) {
             self->ecn_marks[i][j] = 0;
         }
         self->ecn_idx[i] = 0;
         self->cwnd[i] = 1;
+        self->ssthresh[i] = SSTHRESH_START;
+        self->acks_since_last_cwnd_increase[i] = 0;
     }
     
     return self;
 }
 
-void track_ecn(node_t self, int16_t node, int16_t ecn_mark) {
-    self->ecn_marks[node][self->ecn_idx[node]] = ecn_mark;
+void track_ecn(node_t self, int16_t flow_id, int16_t ecn_mark) {
+    self->ecn_marks[flow_id][self->ecn_idx[flow_id]] = ecn_mark;
 
-    self->ecn_idx[node]++;
-    if (self->ecn_idx[node] >= ECN_WIDTH) {
-        self->ecn_idx[node] = 0;
+    // CWND reduction due to ECN flag
+    if (ecn_mark > 0) {
+        int count = 0;
+        for (int i = 0; i < ECN_WIDTH; i++) {
+            count += self->ecn_marks[flow_id][i];
+        }
+
+        self->cwnd[flow_id] -= self->cwnd[flow_id] * count / ECN_WIDTH;
+        if (self->cwnd[flow_id] < 1) {
+            self->cwnd[flow_id] = 1;
+        }
+#ifdef DEBUG_DCTCP
+        printf("node %d reduced flow %d cwnd to %d with %d/8 ECN markers\n", (int) self->node_index, (int) flow_id, (int) self->cwnd[node], count);
+#endif
+    }
+    else {
+        // Slow start CWND increase
+        if (self->cwnd[flow_id] < self->ssthresh[flow_id]) {
+            self->cwnd[flow_id] *= 2;
+#ifdef DEBUG_DCTCP
+            printf("node %d increased flow %d cwnd to %d (SLOW START)\n", (int) self->node_index, (int) flow_id, (int) self->cwnd[node]);
+#endif
+        }
+        // Normal CWND increase
+        else {
+            self->acks_since_last_cwnd_increase[flow_id]++;
+            if (self->acks_since_last_cwnd_increase[flow_id] == self->cwnd[flow_id]){
+                self->cwnd[flow_id]++;
+                self->acks_since_last_cwnd_increase[flow_id] = 0;
+#ifdef DEBUG_DCTCP
+                printf("node %d increased flow %d cwnd to %d\n", (int) self->node_index, (int) flow_id, (int) self->cwnd[node]);
+#endif
+            }
+
+            
+#ifdef DEBUG_DCTCP
+        printf("node %d received an ack for flow %d; %d more until next cwnd increase\n", (int) self->node_index, (int) flow_id, (int) (self->cwnd[node] - self->acks_since_last_cwnd_increase[node]));
+#endif
+        }
+    }
+
+    self->ecn_idx[flow_id]++;
+    if (self->ecn_idx[flow_id] >= ECN_WIDTH) {
+        self->ecn_idx[flow_id] = 0;
     }
 }
-
-void update_cwnd_3_dup(node_t self, int16_t node) {
-    int count = 0;
-    for (int i = 0; i < ECN_WIDTH; i++) {
-        count += self->ecn_marks[node][i];
-    }
-    self->cwnd[node] -= self->cwnd[node] * count / ECN_WIDTH;
-    if (self->cwnd[node] < 1) {
-        self->cwnd[node] = 1;
-    }
-}
-
 
 void free_node(node_t self)
 {

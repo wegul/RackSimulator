@@ -24,5 +24,7 @@ tor_t create_tor(int16_t);
 void free_tor(tor_t);
 packet_t send_to_spine(tor_t, int16_t);
 packet_t send_to_host(tor_t, int16_t);
+int64_t tor_up_buffer_bytes(tor_t, int);
+int64_t tor_down_buffer_bytes(tor_t, int);
 
 #endif
