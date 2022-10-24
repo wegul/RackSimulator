@@ -25,7 +25,7 @@ int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 500000; //stop after these many flows start
 
-volatile int64_t max_timeslots = 1000000; // extern var
+volatile int64_t max_timeslots = 30000; // extern var
 
 // Output files
 FILE * out_fp = NULL;

@@ -36,16 +36,16 @@ def main():
             for i in range(spines):
                 spine_queue_data = spines_data[i*tors:(i+1)*tors]
                 for j in range(tors):
-                    spine_ts[i][j].append(spine_queue_data[j])
+                    spine_ts[i][j].append(spine_queue_data[j] / 1000)
             
             for i in range(tors):
                 upstream_queue_data = upstream_tors_data[i*spines:(i+1)*spines]
                 for j in range(spines):
-                    upstream_tor_ts[i][j].append(upstream_queue_data[j])
+                    upstream_tor_ts[i][j].append(upstream_queue_data[j] / 1000)
 
                 downstream_queue_data = downstream_tors_data[i*hosts:(i+1)*hosts]
                 for j in range(hosts):
-                    downstream_tor_ts[i][j].append(downstream_queue_data[j])
+                    downstream_tor_ts[i][j].append(downstream_queue_data[j] / 1000)
     
     num_timeseries = len(spine_ts[0][0])
     print(str(num_timeseries) + " ts")
@@ -65,11 +65,8 @@ def main():
             spine_axs[x_idx, y_idx].plot(times, spine_ts[spine][tor])
 
     for ax in spine_axs.flat:
-        ax.set(xlabel='Time (s)', ylabel='Queue Length (pkts)')
+        ax.set(xlabel='Time (s)', ylabel='Queue Length (KB)')
     
-    for ax in spine_axs.flat:
-        ax.label_outer()
-
     plt.figure(1)
 
     up_tor_fig, up_tor_axs = plt.subplots(tors / 4, 4)
@@ -85,10 +82,7 @@ def main():
             up_tor_axs[x_idx, y_idx].plot(times, upstream_tor_ts[tor][spine])
 
     for ax in up_tor_axs.flat:
-        ax.set(xlabel='Time (s)', ylabel='Queue Length (pkts)')
-    
-    for ax in up_tor_axs.flat:
-        ax.label_outer()
+        ax.set(xlabel='Time (s)', ylabel='Queue Length (KB)')
 
     plt.figure(2)
 
@@ -105,10 +99,7 @@ def main():
             down_tor_axs[x_idx, y_idx].plot(times, downstream_tor_ts[tor][host])
 
     for ax in down_tor_axs.flat:
-        ax.set(xlabel='Time (s)', ylabel='Queue Length (pkts)')
-    
-    for ax in down_tor_axs.flat:
-        ax.label_outer()
+        ax.set(xlabel='Time (s)', ylabel='Queue Length (KB)')
     
     plt.figure(3)
     plt.show()
