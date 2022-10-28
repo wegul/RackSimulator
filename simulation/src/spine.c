@@ -10,6 +10,7 @@ spine_t create_spine(int16_t spine_index)
     for (int i = 0; i < SPINE_PORT_COUNT; i++) {
         self->pkt_buffer[i] = create_buffer(SPINE_PORT_BUFFER_LEN);
         self->queue_stat[i] = create_timeseries();
+        self->snapshot_idx[i] = 0;
     }
 
     return self;
@@ -35,8 +36,19 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num)
     packet_t pkt = NULL;
 
     pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
-
+    if (pkt != NULL && spine->snapshot_idx[tor_num] > 0) {
+        spine->snapshot_idx[tor_num]--;
+    }
+    
     return pkt;
+}
+
+snapshot_t * snapshot_to_tor(spine_t spine, int16_t tor_num)
+{
+    int16_t pkts_recorded = 0;
+    snapshot_t * snapshot = create_snapshot(spine->pkt_buffer[tor_num], spine->snapshot_idx[tor_num], &pkts_recorded);
+    spine->snapshot_idx[tor_num] += pkts_recorded;
+    return snapshot;
 }
 
 int64_t spine_buffer_bytes(spine_t spine, int port)

@@ -16,7 +16,7 @@ struct node {
     int64_t last_acked[MAX_FLOW_ID];
     int16_t ecn_marks[MAX_FLOW_ID][ECN_WIDTH];
     int16_t ecn_idx[MAX_FLOW_ID];
-    int64_t cwnd[MAX_FLOW_ID]; // Current congestion window size in MSS
+    int64_t cwnd[MAX_FLOW_ID]; // Current congestion window size in MTU
     int64_t acks_since_last_cwnd_increase[MAX_FLOW_ID]; // When CWND acks are received, cwnd can be incrememented
     int64_t ssthresh[MAX_FLOW_ID]; // Slow Start Threshold
 };

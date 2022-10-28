@@ -11,5 +11,8 @@ void link_enqueue(link_t, void*);
 void* link_dequeue(link_t);
 void* link_peek(link_t);
 void free_link(link_t);
+void ipg_send(link_t, void*);
+void* ipg_recv(link_t);
+void* ipg_peek(link_t);
 
 #endif

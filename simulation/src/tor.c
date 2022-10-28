@@ -17,6 +17,7 @@ tor_t create_tor(int16_t tor_index)
         self->upstream_pkt_buffer[i]
             = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
         self->upstream_queue_stat[i] = create_timeseries();
+        self->snapshot_idx[i] = 0;
     }
     
     create_routing_table(self->routing_table);
@@ -45,6 +46,9 @@ void free_tor(tor_t self)
 packet_t send_to_spine(tor_t tor, int16_t spine_id)
 {
     packet_t pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
+    if (pkt != NULL && tor->snapshot_idx[spine_id] > 0) {
+        tor->snapshot_idx[spine_id]--;
+    }
 
     return pkt;
 }
@@ -55,6 +59,14 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor)
         buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
 
     return pkt;
+}
+
+snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
+{
+    int16_t pkts_recorded = 0;
+    snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], tor->snapshot_idx[spine_id], &pkts_recorded);
+    tor->snapshot_idx[spine_id] += pkts_recorded;
+    return snapshot;
 }
 
 int64_t tor_up_buffer_bytes(tor_t tor, int port)

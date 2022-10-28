@@ -3,8 +3,9 @@
 // Default values for simulation
 static int pkt_size = 1500; //in bytes
 static float link_bandwidth = 100; //in Gbps
-static float timeslot_len; //in ns
+static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
+static int snapshot_epoch = 2; //timeslots between snapshots
 
 int16_t header_overhead = 64;
 float per_hop_propagation_delay_in_ns = 100;
@@ -93,6 +94,18 @@ void work_per_timeslot()
                     bytes_sent += pkt->size;
                     peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
                 }
+
+                //send snapshots every snapshot_epoch
+                if (curr_timeslot % snapshot_epoch == 0) {
+                    snapshot_t * snapshot = snapshot_to_tor(spine, k);
+                    if (snapshot != NULL) {
+                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                        ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                        printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
+#endif
+                    }
+                }
             }
         }
 
@@ -116,7 +129,7 @@ void work_per_timeslot()
 
                     // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
                     int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
-                    int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MSS - (node->seq_num[flow_id] - node->last_acked[flow_id]);
+                    int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
                     if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
                         // Determine how large the packet will be
                         int64_t size = 1500;
@@ -203,14 +216,24 @@ void work_per_timeslot()
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = send_to_spine(tor, tor_port);
                     if (pkt != NULL) {
-                        pkt->time_to_dequeue_from_link = curr_timeslot +
-                            per_hop_propagation_delay_in_timeslots; 
+                        pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots; 
                         link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
 #ifdef DEBUG_DRIVER
                         printf("%d: ToR %d sent pkt to spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
                         bytes_sent += pkt->size;
                         peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
+                    }
+                }
+                //send snapshots every snapshot_epoch
+                if (curr_timeslot % snapshot_epoch == 0) {
+                    snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
+                    if (snapshot != NULL) {
+                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                        ipg_send(links->spine_to_tor_link[tor_index][tor_port], snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                    printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
+#endif
                     }
                 }
             }
@@ -223,8 +246,7 @@ void work_per_timeslot()
                     packet_t pkt = send_to_host(tor, tor_port);
                     if (pkt != NULL) {
                         int16_t dst_host = pkt->dst_node;
-                        pkt->time_to_dequeue_from_link = curr_timeslot +
-                            per_hop_propagation_delay_in_timeslots;
+                        pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                         link_enqueue(links->tor_to_host_link[tor_index][dst_host],pkt);
 #ifdef DEBUG_DRIVER
                         printf("%d: ToR %d sent pkt to host %d\n", (int) curr_timeslot, i, dst_host);
@@ -257,6 +279,7 @@ void work_per_timeslot()
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
                     if (pkt != NULL) {
                         buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
+                        bytes_rcvd += pkt->size;
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
                         if (tor->upstream_pkt_buffer[spine_id]->num_elements > ECN_CUTOFF_TOR_UP) {
                             pkt->ecn_flag = 1;
@@ -269,10 +292,9 @@ void work_per_timeslot()
                         printf("%d: Tor %d recv pkt from host %d\n", (int) curr_timeslot, i, src_host);
 #endif
 #ifdef RECORD_PACKETS
-                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, up\n", (int) pkt->flow_id, (int) curr_timeslot, (int) tor_port, (int) pkt->control_flag);
+                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, up\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
 #endif
                     }
-                    bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->host_to_tor_link[src_host][tor_index]);
                 }
             }
@@ -300,11 +322,20 @@ void work_per_timeslot()
                         printf("%d: Tor %d recv pkt from spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
 #ifdef RECORD_PACKETS
-                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, down\n", (int) pkt->flow_id, (int) curr_timeslot, (int) tor_port, (int) pkt->control_flag);
+                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, down\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
 #endif
                     }
                     bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->spine_to_tor_link[src_spine][tor_index]);
+                }
+                // Receive snapshot
+                snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->spine_to_tor_link[src_spine][tor_index]);
+                if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
+                    snapshot = ipg_recv(links->spine_to_tor_link[src_spine][tor_index]);
+                    free(snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                    printf("%d: ToR %d recv snapshot from spine %d\n", (int) curr_timeslot, i, tor_port);
+#endif
                 }
             }
         }
@@ -330,15 +361,14 @@ void work_per_timeslot()
                     printf("%d: Spine %d recv pkt from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
 #endif
 #ifdef RECORD_PACKETS
-                    fprintf(spine_outfiles[i], "%d, %d, %d, %d\n", (int) pkt->flow_id, (int) curr_timeslot, (int) spine_port, (int) pkt->control_flag);
+                    fprintf(spine_outfiles[i], "%d, %d, %d, %d, %d\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) spine_port, (int) (curr_timeslot * timeslot_len));
 #endif
                     //enq packet in the virtual queue
                     int16_t dst_host = pkt->dst_node;
                     int16_t dst_tor = dst_host / NODES_PER_RACK;
                     if (dst_host != -1) {
                         pkt->time_when_added_to_spine_queue = curr_timeslot;
-                        assert(buffer_put(spine->pkt_buffer[dst_tor], pkt)                                                                                                                                                                                                                                        
-                                != -1);
+                        assert(buffer_put(spine->pkt_buffer[dst_tor], pkt) != -1);
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
                         if (spine->pkt_buffer[dst_tor]->num_elements > ECN_CUTOFF_SPINE) {
                             pkt->ecn_flag = 1;
@@ -353,6 +383,15 @@ void work_per_timeslot()
                     }
                     bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->tor_to_spine_link[src_tor][spine_index]);
+                }
+                // Receive snapshot
+                snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->tor_to_spine_link[src_tor][spine_index]);
+                if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
+                    snapshot = ipg_recv(links->spine_to_tor_link[src_tor][spine_index]);
+                    free(snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                    printf("%d: Spine %d recv snapshot from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
+#endif
                 }
             }
         }
@@ -450,17 +489,17 @@ void work_per_timeslot()
         }
 
         if (total_flows_started >= num_of_flows_to_start) {
-            printf("Started %d flows\n\n", (int) total_flows_started);
+            printf("\nStarted %d flows\n\n", (int) total_flows_started);
             terminate1 = 1;
         }
 
         if (num_of_flows_finished >= num_of_flows_to_finish) {
-            printf("Finished %d flows\n\n", (int) num_of_flows_finished);
+            printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
             terminate2 = 1;
         }
 
         if (curr_timeslot >= max_timeslots) {
-            printf("Reached max timeslot %d\n\n", (int) curr_timeslot);
+            printf("\nReached max timeslot %d\n\n", (int) curr_timeslot);
             terminate3 = 1;
         }
 
@@ -600,6 +639,8 @@ void read_tracefile(char * filename) {
         
         while (fscanf(fp, "%d,%d,%d,%d,%d,%d", &flow_id, &src, &dst, &flow_size_bytes, &flow_size_pkts, &timeslot) == 6 && flow_id < MAX_FLOW_ID) {
             initialize_flow(flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);
+            // Final timeslot is start time of last flow
+            max_timeslots = timeslot;
         }
         
         printf("Flows initialized\n");
@@ -690,7 +731,7 @@ void open_switch_outfiles(char * base_filename) {
         strncat(filename, spine_id, 5);
         strncat(filename, csv_suffix, 4);
         spine_outfiles[i] = fopen(filename, "w");
-        fprintf(spine_outfiles[i], "flow_id, timeslot, port, control\n");
+        fprintf(spine_outfiles[i], "flow_id, src, dst, port, arrival_time\n");
     }
 
     for (int i = 0; i < NUM_OF_RACKS; i++) {
@@ -703,7 +744,7 @@ void open_switch_outfiles(char * base_filename) {
         strncat(filename, tor_id, 5);
         strncat(filename, csv_suffix, 4);
         tor_outfiles[i] = fopen(filename, "w");
-        fprintf(tor_outfiles[i], "flow_id, timeslot, port, control, direction\n");
+        fprintf(tor_outfiles[i], "flow_id, src, dst, port, arrival_time, direction\n");
     }
 }
 

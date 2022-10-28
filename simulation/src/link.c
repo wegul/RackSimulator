@@ -4,6 +4,7 @@ struct link {
     int16_t src_node;
     int16_t dst_node;
     buffer_t * fifo;
+    void * ipg_data;
 };
 
 link_t create_link(int16_t src_node, int16_t dst_node, int32_t capacity)
@@ -13,6 +14,7 @@ link_t create_link(int16_t src_node, int16_t dst_node, int32_t capacity)
     self->src_node = src_node;
     self->dst_node = dst_node;
     self->fifo = create_buffer(capacity);
+    self->ipg_data = NULL;
     return self;
 }
 
@@ -38,6 +40,26 @@ void free_link(link_t self)
 {
     if (self != NULL) {
         free_buffer(self->fifo);
+        if (self->ipg_data != NULL) {
+            free(self->ipg_data);
+        }
         free(self);
     }
+}
+
+void ipg_send(link_t self, void* data) 
+{
+    self->ipg_data = data;
+}
+
+void* ipg_recv(link_t self) 
+{
+    void * data = self->ipg_data;
+    self->ipg_data = NULL;
+    return data;
+}
+
+void * ipg_peek(link_t self)
+{
+    return self->ipg_data;
 }

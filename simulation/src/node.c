@@ -78,7 +78,7 @@ void track_ecn(node_t self, int16_t flow_id, int16_t ecn_mark) {
 void free_node(node_t self)
 {
     if (self != NULL) {
-        free_buffer(self->active_flows);
+        // free_buffer(self->active_flows);
         free(self);
     }
 }

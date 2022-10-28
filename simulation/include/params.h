@@ -55,8 +55,11 @@
 #define ECN_CUTOFF_TOR_DOWN 70
 #define ECN_CUTOFF_SPINE 56
 #define ECN_WIDTH 8
-#define MSS 1500
+#define MTU 1500
 #define SSTHRESH_START 8
+#define INTERPACKET_GAP 96
+#define SNAPSHOT_SIZE 4
+#define SNAPSHOT_TABLE_SIZE 500
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;

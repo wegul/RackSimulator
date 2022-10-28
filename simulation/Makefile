@@ -11,6 +11,7 @@ LFLAGS = -lm -pthread
 
 #CFLAGS += -DDEBUG_DRIVER
 #CFLAGS += -DDEBUG_DCTCP
+#CFLAGS += -DDEBUG_SNAPSHOTS
 CFLAGS += -DRECORD_PACKETS
 CFLAGS += -DWRITE_QUEUELENS
 
@@ -25,6 +26,7 @@ OBJ = $(OBJDIR)/arraylist.o \
       $(OBJDIR)/node.o \
       $(OBJDIR)/packet.o \
       $(OBJDIR)/routing_table.o \
+      $(OBJDIR)/snapshot.o \
       $(OBJDIR)/spine.o \
       $(OBJDIR)/system_stats.o \
       $(OBJDIR)/timeseries.o \
