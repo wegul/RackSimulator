@@ -23,6 +23,7 @@ OBJ = $(OBJDIR)/arraylist.o \
       $(OBJDIR)/flowlist.o \
       $(OBJDIR)/link.o \
       $(OBJDIR)/links.o \
+      $(OBJDIR)/memory.o \
       $(OBJDIR)/node.o \
       $(OBJDIR)/packet.o \
       $(OBJDIR)/routing_table.o \

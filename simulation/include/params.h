@@ -60,6 +60,8 @@
 #define INTERPACKET_GAP 96
 #define SNAPSHOT_SIZE 4
 #define SNAPSHOT_TABLE_SIZE 500
+#define SRAM_SIZE 100000
+#define DRAM_SIZE 100000
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;
