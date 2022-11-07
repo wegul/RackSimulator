@@ -90,9 +90,12 @@ void work_per_timeslot()
 #ifdef DEBUG_DRIVER
                         printf("%d: spine %d sent pkt to ToR %d\n", (int) curr_timeslot, i, k);
 #endif
+                        bytes_sent += pkt->size;
+                        peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
                     }
-                    bytes_sent += pkt->size;
-                    peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
+                    else {
+                        break;
+                    }
                 }
 
                 //send snapshots every snapshot_epoch
@@ -224,6 +227,9 @@ void work_per_timeslot()
                         bytes_sent += pkt->size;
                         peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
                     }
+                    else {
+                        break;
+                    }
                 }
                 //send snapshots every snapshot_epoch
                 if (curr_timeslot % snapshot_epoch == 0) {
@@ -255,6 +261,9 @@ void work_per_timeslot()
                         bytes_sent += pkt->size;
                         peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
                     }
+                    else {
+                        break;
+                    }
                 }
             }
         }
@@ -279,7 +288,6 @@ void work_per_timeslot()
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
                     if (pkt != NULL) {
                         buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
-                        bytes_rcvd += pkt->size;
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
                         if (tor->upstream_pkt_buffer[spine_id]->num_elements > ECN_CUTOFF_TOR_UP) {
                             pkt->ecn_flag = 1;
@@ -294,6 +302,7 @@ void work_per_timeslot()
 #ifdef RECORD_PACKETS
                         fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, up\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
 #endif
+                        bytes_rcvd += pkt->size;
                     }
                     peek_pkt = (packet_t) link_peek(links->host_to_tor_link[src_host][tor_index]);
                 }
@@ -324,8 +333,8 @@ void work_per_timeslot()
 #ifdef RECORD_PACKETS
                         fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, down\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
 #endif
+                        bytes_rcvd += pkt->size;
                     }
-                    bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->spine_to_tor_link[src_spine][tor_index]);
                 }
                 // Receive snapshot

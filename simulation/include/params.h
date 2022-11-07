@@ -62,6 +62,7 @@
 #define SNAPSHOT_TABLE_SIZE 500
 #define SRAM_SIZE 100000
 #define DRAM_SIZE 100000
+#define DRAM_DELAY 60
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;

@@ -21,6 +21,10 @@ tor_t create_tor(int16_t tor_index)
     }
     
     create_routing_table(self->routing_table);
+
+    self->sram = create_sram(SRAM_SIZE);
+    initialize_sram(self->sram);
+    self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
     
     return self;
 }
@@ -39,15 +43,38 @@ void free_tor(tor_t self)
             free_timeseries(self->upstream_queue_stat[i]);
         }
 
+        free_sram(self->sram);
+        free_dram(self->dram);
+
         free(self);
     }
 }
 
 packet_t send_to_spine(tor_t tor, int16_t spine_id)
 {
-    packet_t pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
-    if (pkt != NULL && tor->snapshot_idx[spine_id] > 0) {
-        tor->snapshot_idx[spine_id]--;
+    packet_t pkt = NULL;
+
+    pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);
+    if (pkt != NULL) {
+        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        // Cache miss
+        if (val < 0) {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
+#endif
+            pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            return NULL;
+        }
+        // Cache hit
+        else {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
+#endif
+            if (tor->snapshot_idx[spine_id] > 0) {
+                tor->snapshot_idx[spine_id]--;
+            }
+            pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
+        }
     }
 
     return pkt;
@@ -55,8 +82,27 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id)
 
 packet_t send_to_host(tor_t tor, int16_t host_within_tor)
 {
-    packet_t pkt = (packet_t)
-        buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
+    packet_t pkt = NULL;
+    
+    pkt = (packet_t) buffer_peek(tor->downstream_pkt_buffer[host_within_tor], 0);
+    if (pkt != NULL) {
+        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        // Cache miss
+        if (val < 0) {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
+#endif
+            pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            return NULL;
+        }
+        // Cache hit
+        else {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
+#endif
+            pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
+        }
+    }
 
     return pkt;
 }

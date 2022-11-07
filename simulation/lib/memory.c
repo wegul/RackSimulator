@@ -43,16 +43,20 @@ void initialize_sram(sram_t * sram) {
         }
         if (sram->tail != NULL) {
             sram->tail->next = node;
+            node->prev = sram->tail;
         }
         sram->tail = node;
     }
+    sram->count = sram->capacity;
 }
 
 int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
     lru_node_t * tail = sram->tail;
     if (tail != NULL) {
         sram->tail = tail->prev;
-        sram->tail->next = NULL;
+        if (sram->tail != NULL) {
+            sram->tail->next = NULL;
+        }
         int64_t flow_id = tail->flow_id;
         int64_t val = tail->val;
         free(tail);
@@ -70,6 +74,7 @@ int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
     lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id]);
     if (sram->head != NULL) {
         sram->head->prev = node;
+        node->next = sram->head;
     }
     if (sram->tail == NULL) {
         sram->tail = node;
@@ -87,12 +92,17 @@ int64_t access_sram(sram_t * sram, int64_t flow_id) {
     while (node != NULL) {
         if (node->flow_id == flow_id) {
             // Cache hit, bring to front
-            node->prev->next = node->next;
-            node->next->prev = node->prev;
-            node->prev = NULL;
-            node->next = sram->head;
-            sram->head->prev = node;
-            sram->head = node;
+            if (node != sram->head) {
+                node->prev->next = node->next;
+                if (node != sram->tail) {
+                    node->next->prev = node->prev;
+                }
+                node->prev = NULL;
+                node->next = sram->head;
+                sram->head->prev = node;
+                sram->head = node;
+            }
+            node->val++;
             return node->val; // SUCCESS!!!
         }
         node = node->next;
@@ -104,6 +114,7 @@ int64_t access_sram(sram_t * sram, int64_t flow_id) {
 void free_sram(sram_t * sram) {
     lru_node_t * head = sram->head;
     while (head != NULL) {
+        //printf("free sram node %d\n", (int) head->flow_id);
         lru_node_t * next = head->next;
         free(head);
         head = next;

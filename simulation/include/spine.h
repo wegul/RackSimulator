@@ -8,6 +8,7 @@
 #include "arraylist.h"
 #include "timeseries.h"
 #include "snapshot.h"
+#include "memory.h"
 
 struct spine {
     int16_t spine_index;
@@ -17,6 +18,9 @@ struct spine {
     int16_t snapshot_idx[NUM_OF_TORS];
     //stats datastructure
     timeseries_t * queue_stat[SPINE_PORT_COUNT];
+    //memory datastructure
+    sram_t * sram;
+    dram_t * dram;
 };
 typedef struct spine* spine_t;
 

@@ -7,6 +7,7 @@
 #include "routing_table.h"
 #include "timeseries.h"
 #include "snapshot.h"
+#include "memory.h"
 
 struct tor {
     int16_t tor_index;
@@ -19,6 +20,9 @@ struct tor {
     //stats datastructure
     timeseries_t * downstream_queue_stat[NODES_PER_RACK];
     timeseries_t * upstream_queue_stat[NUM_OF_SPINES];
+    //memory datastructure
+    sram_t * sram;
+    dram_t * dram;
 };
 typedef struct tor* tor_t;
 
