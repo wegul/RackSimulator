@@ -13,8 +13,9 @@ spine_t create_spine(int16_t spine_index)
         self->snapshot_idx[i] = 0;
     }
 
-    self->sram = create_sram(SRAM_SIZE);
+    self->sram = create_sram(SRAM_SIZE, 1);
     initialize_sram(self->sram);
+    self->dm_sram = create_dm_sram(SRAM_SIZE, 1);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
     return self;
@@ -31,6 +32,7 @@ void free_spine(spine_t self)
         }
 
         free_sram(self->sram);
+        free_dm_sram(self->dm_sram);
         free_dram(self->dram);
 
         free(self);

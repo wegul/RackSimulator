@@ -22,6 +22,7 @@ struct tor {
     timeseries_t * upstream_queue_stat[NUM_OF_SPINES];
     //memory datastructure
     sram_t * sram;
+    dm_sram_t * dm_sram;
     dram_t * dram;
 };
 typedef struct tor* tor_t;

@@ -22,8 +22,9 @@ tor_t create_tor(int16_t tor_index)
     
     create_routing_table(self->routing_table);
 
-    self->sram = create_sram(SRAM_SIZE);
+    self->sram = create_sram(SRAM_SIZE, 1);
     initialize_sram(self->sram);
+    self->dm_sram = create_dm_sram(SRAM_SIZE, 1);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
     
     return self;
@@ -44,6 +45,7 @@ void free_tor(tor_t self)
         }
 
         free_sram(self->sram);
+        free_dm_sram(self->dm_sram);
         free_dram(self->dram);
 
         free(self);

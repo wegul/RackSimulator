@@ -20,6 +20,7 @@ struct spine {
     timeseries_t * queue_stat[SPINE_PORT_COUNT];
     //memory datastructure
     sram_t * sram;
+    dm_sram_t * dm_sram;
     dram_t * dram;
 };
 typedef struct spine* spine_t;

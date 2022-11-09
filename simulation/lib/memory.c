@@ -11,13 +11,36 @@ lru_node_t * create_lru_node(int64_t flow_id, int64_t val) {
     return node;
 }
 
-sram_t * create_sram(int32_t size) {
+sram_t * create_sram(int32_t size, int16_t initialize) {
     sram_t * sram = malloc(sizeof(sram_t));
     MALLOC_TEST(sram, __LINE__);
     sram->capacity = size;
     sram->count = 0;
     sram->head = NULL;
     sram->tail = NULL;
+
+    if (initialize == 1) {
+        initialize_sram(sram);
+    }
+
+    return sram;
+}
+
+dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
+    dm_sram_t * sram = malloc(sizeof(dm_sram_t));
+    MALLOC_TEST(sram, __LINE__);
+    sram->capacity = size;
+    sram->flow_ids = malloc(sizeof(int64_t) * size);
+    sram->memory = malloc(sizeof(int64_t) * size);
+    for (int i = 0; i < size; i++) {
+        if (initialize == 1) {
+            sram->flow_ids[i] = i;
+        }
+        else {
+            sram->flow_ids[i] = 0;
+        }
+        sram->memory[i] = 0;
+    }
 
     return sram;
 }
@@ -111,6 +134,28 @@ int64_t access_sram(sram_t * sram, int64_t flow_id) {
     return -1; // FAILURE!!!
 }
 
+int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
+    dram->memory[flow_id] = sram->memory[flow_id % sram->capacity];
+    return flow_id;
+}
+
+int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
+    evict_from_sram(sram, dram, flow_id);
+    sram->flow_ids[flow_id % sram->capacity] = flow_id;
+    sram->memory[flow_id % sram->capacity] = dram->memory[flow_id];
+    return sram->memory[flow_id % sram->capacity];
+}
+
+int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id) {
+    if (sram->flow_ids[flow_id % sram->capacity] == flow_id) {
+        // Cache hit
+        sram->memory[flow_id % sram->capacity]++;
+        return sram->memory[flow_id % sram->capacity]; // SUCCESS!!!
+    }
+    // Cache miss
+    return -1; // FAILURE!!!
+}
+
 void free_sram(sram_t * sram) {
     lru_node_t * head = sram->head;
     while (head != NULL) {
@@ -119,6 +164,12 @@ void free_sram(sram_t * sram) {
         free(head);
         head = next;
     }
+    free(sram);
+}
+
+void free_dm_sram(dm_sram_t * sram) {
+    free(sram->flow_ids);
+    free(sram->memory);
     free(sram);
 }
 
