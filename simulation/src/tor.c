@@ -1,6 +1,6 @@
 #include "tor.h"
 
-tor_t create_tor(int16_t tor_index)
+tor_t create_tor(int16_t tor_index, int16_t sram_size, int16_t init_sram)
 {
     tor_t self = (tor_t) malloc(sizeof(struct tor));
     MALLOC_TEST(self, __LINE__);
@@ -22,9 +22,8 @@ tor_t create_tor(int16_t tor_index)
     
     create_routing_table(self->routing_table);
 
-    self->sram = create_sram(SRAM_SIZE, 1);
-    initialize_sram(self->sram);
-    self->dm_sram = create_dm_sram(SRAM_SIZE, 1);
+    self->sram = create_sram(sram_size, init_sram);
+    self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
     
     return self;
@@ -65,6 +64,36 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id)
             printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
 #endif
             pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            return NULL;
+        }
+        // Cache hit
+        else {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
+#endif
+            if (tor->snapshot_idx[spine_id] > 0) {
+                tor->snapshot_idx[spine_id]--;
+            }
+            pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
+        }
+    }
+
+    return pkt;
+}
+
+packet_t send_to_spine_dm(tor_t tor, int16_t spine_id)
+{
+    packet_t pkt = NULL;
+
+    pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);
+    if (pkt != NULL) {
+        int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id);
+        // Cache miss
+        if (val < 0) {
+#ifdef DEBUG_MEMORY
+            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
+#endif
+            dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit

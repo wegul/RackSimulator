@@ -49,6 +49,10 @@ void free_link(link_t self)
 
 void ipg_send(link_t self, void* data) 
 {
+    if (self->ipg_data != NULL) {
+        free(self->ipg_data);
+        self->ipg_data = NULL;
+    }
     self->ipg_data = data;
 }
 

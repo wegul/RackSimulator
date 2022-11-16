@@ -5,7 +5,7 @@ static int pkt_size = 1500; //in bytes
 static float link_bandwidth = 100; //in Gbps
 static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
-static int snapshot_epoch = 2; //timeslots between snapshots
+static int snapshot_epoch = 1; //timeslots between snapshots
 
 int16_t header_overhead = 64;
 float per_hop_propagation_delay_in_ns = 100;
@@ -13,6 +13,10 @@ int per_hop_propagation_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; //extern var
 int packet_counter = 0;
 int num_datapoints = 100000;
+
+int init_sram = 1; // Value of 1 = initialize SRAM
+int fully_associative = 0; // Value of 1 = use fully-associative SRAM
+int sram_size = 1000; // SRAM size in bytes
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
@@ -82,7 +86,13 @@ void work_per_timeslot()
                 int bytes_sent = 0;
                 packet_t peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot){
-                    packet_t pkt = send_to_tor(spine, k);
+                    packet_t pkt = NULL;
+                    if (fully_associative > 0) {
+                        pkt = send_to_tor(spine, k);
+                    }
+                    else {
+                        pkt = send_to_tor_dm(spine, k);
+                    }
                     if (pkt != NULL) {
                         pkt->time_to_dequeue_from_link = curr_timeslot +
                             per_hop_propagation_delay_in_timeslots;
@@ -217,7 +227,13 @@ void work_per_timeslot()
                 int bytes_sent = 0;
                 packet_t peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
-                    packet_t pkt = send_to_spine(tor, tor_port);
+                    packet_t pkt = NULL;
+                    if (fully_associative > 0) {
+                        pkt = send_to_spine(tor, tor_port);
+                    }
+                    else {
+                        pkt = send_to_spine_dm(tor, tor_port);
+                    }
                     if (pkt != NULL) {
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots; 
                         link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
@@ -547,7 +563,7 @@ void process_args(int argc, char ** argv) {
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:s:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -579,6 +595,22 @@ void process_args(int argc, char ** argv) {
             case 'q':
                 num_datapoints = atoi(optarg);
                 printf("Writing %d queue length datapoints to timeseries.csv file\n", num_datapoints);
+            case 'a':
+                fully_associative = atoi(optarg);
+                if (fully_associative == 0) {
+                    printf("Using direct-mapped SRAM\n");
+                }
+                else {
+                    printf("Using fully-associative SRAM\n");
+                }
+            case 'i':
+                init_sram = atoi(optarg);
+                if (init_sram == 1) {
+                    printf("Initializing SRAM\n");
+                }
+            case 's':
+                sram_size = atoi(optarg);
+                printf("Using SRAM size of %d\n", sram_size);
             case 'f': 
                 if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
@@ -686,7 +718,7 @@ void initialize_network() {
     tors = (tor_t*) malloc(NUM_OF_TORS * sizeof(tor_t));
     MALLOC_TEST(tors, __LINE__);
     for (int i = 0; i < NUM_OF_TORS; ++i) {
-        tors[i] = create_tor(i);
+        tors[i] = create_tor(i, sram_size, init_sram);
     }
     printf("ToRs initialized\n");
 
@@ -694,7 +726,7 @@ void initialize_network() {
     spines = (spine_t*) malloc(NUM_OF_SPINES * sizeof(spine_t));
     MALLOC_TEST(spines, __LINE__);
     for (int i = 0; i < NUM_OF_SPINES; ++i) {
-        spines[i] = create_spine(i);
+        spines[i] = create_spine(i, sram_size, init_sram);
     }
     printf("Spines initialized\n");
 

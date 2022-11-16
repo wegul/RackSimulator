@@ -140,7 +140,7 @@ int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
 }
 
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
-    evict_from_sram(sram, dram, flow_id);
+    evict_from_dm_sram(sram, dram, flow_id);
     sram->flow_ids[flow_id % sram->capacity] = flow_id;
     sram->memory[flow_id % sram->capacity] = dram->memory[flow_id];
     return sram->memory[flow_id % sram->capacity];

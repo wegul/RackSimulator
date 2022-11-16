@@ -1,6 +1,6 @@
 #include "spine.h"
 
-spine_t create_spine(int16_t spine_index)
+spine_t create_spine(int16_t spine_index, int16_t sram_size, int16_t init_sram)
 {
     spine_t self = (spine_t) malloc(sizeof(struct spine));
     MALLOC_TEST(self, __LINE__);
@@ -13,9 +13,8 @@ spine_t create_spine(int16_t spine_index)
         self->snapshot_idx[i] = 0;
     }
 
-    self->sram = create_sram(SRAM_SIZE, 1);
-    initialize_sram(self->sram);
-    self->dm_sram = create_dm_sram(SRAM_SIZE, 1);
+    self->sram = create_sram(sram_size, init_sram);
+    self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
     return self;
@@ -53,6 +52,37 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num)
             printf("Spine %d Cache Miss Flow %d", spine->spine_index, (int) pkt->flow_id);
 #endif
             pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
+            return NULL;
+        }
+        // Cache hit
+        else {
+#ifdef DEBUG_MEMORY
+            printf("Spine %d Cache Hit Flow %d: %d", spine->spine_index, (int) pkt->flow_id, (int) val);
+#endif
+            if (spine->snapshot_idx[tor_num] > 0) {
+                spine->snapshot_idx[tor_num]--;
+            }
+            pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
+        }
+    }
+    
+    return pkt;
+}
+
+packet_t send_to_tor_dm(spine_t spine, int16_t tor_num)
+{
+    //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
+    packet_t pkt = NULL;
+
+    pkt = (packet_t) buffer_peek(spine->pkt_buffer[tor_num], 0);
+    if (pkt != NULL) {
+        int64_t val = access_dm_sram(spine->dm_sram, pkt->flow_id);
+        // Cache miss
+        if (val < 0) {
+#ifdef DEBUG_MEMORY
+            printf("Spine %d Cache Miss Flow %d", spine->spine_index, (int) pkt->flow_id);
+#endif
+            dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit

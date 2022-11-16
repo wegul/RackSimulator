@@ -59,8 +59,7 @@
 #define SSTHRESH_START 8
 #define INTERPACKET_GAP 96
 #define SNAPSHOT_SIZE 4
-#define SRAM_SIZE 100000
-#define DRAM_SIZE 100000
+#define DRAM_SIZE 1000000
 #define DRAM_DELAY 60
 
 extern int16_t*** source_list;
