@@ -111,13 +111,19 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id)
     return pkt;
 }
 
-packet_t send_to_host(tor_t tor, int16_t host_within_tor)
+packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram)
 {
     packet_t pkt = NULL;
     
     pkt = (packet_t) buffer_peek(tor->downstream_pkt_buffer[host_within_tor], 0);
     if (pkt != NULL) {
-        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        int64_t val = -1;
+        if (fa_sram > 0) {
+            val = access_sram(tor->sram, pkt->flow_id);
+        }
+        else {
+            val = access_dm_sram(tor->dm_sram, pkt->flow_id);
+        }
         // Cache miss
         if (val < 0) {
 #ifdef DEBUG_MEMORY

@@ -265,7 +265,7 @@ void work_per_timeslot()
                 int bytes_sent = 0;
                 packet_t peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
-                    packet_t pkt = send_to_host(tor, tor_port);
+                    packet_t pkt = send_to_host(tor, tor_port, fully_associative);
                     if (pkt != NULL) {
                         int16_t dst_host = pkt->dst_node;
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
@@ -595,6 +595,7 @@ void process_args(int argc, char ** argv) {
             case 'q':
                 num_datapoints = atoi(optarg);
                 printf("Writing %d queue length datapoints to timeseries.csv file\n", num_datapoints);
+                break;
             case 'a':
                 fully_associative = atoi(optarg);
                 if (fully_associative == 0) {
@@ -603,14 +604,17 @@ void process_args(int argc, char ** argv) {
                 else {
                     printf("Using fully-associative SRAM\n");
                 }
+                break;
             case 'i':
                 init_sram = atoi(optarg);
                 if (init_sram == 1) {
                     printf("Initializing SRAM\n");
                 }
+                break;
             case 's':
                 sram_size = atoi(optarg);
                 printf("Using SRAM size of %d\n", sram_size);
+                break;
             case 'f': 
                 if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
@@ -666,6 +670,7 @@ void read_tracefile(char * filename) {
     FILE * fp;
     flowlist = create_flowlist();
     if (strcmp(filename, "")) {
+        printf("Opening tracefile %s\n", filename);
         fp = fopen(filename, "r");
         if (fp == NULL) {
             perror("open");
