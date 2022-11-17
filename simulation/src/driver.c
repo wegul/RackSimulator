@@ -14,9 +14,9 @@ volatile int64_t curr_timeslot = 0; //extern var
 int packet_counter = 0;
 int num_datapoints = 100000;
 
-int init_sram = 1; // Value of 1 = initialize SRAM
+int init_sram = 0; // Value of 1 = initialize SRAM
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
-int sram_size = 1000; // SRAM size in bytes
+int sram_size = SRAM_SIZE;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
@@ -609,11 +609,15 @@ void process_args(int argc, char ** argv) {
                 init_sram = atoi(optarg);
                 if (init_sram == 1) {
                     printf("Initializing SRAM\n");
+                    for (int i = 0; i < NUM_OF_SPINES; i++) {
+                        initialize_sram(spines[i]->sram);
+                        initialize_dm_sram(spines[i]->dm_sram);
+                    }
+                    for (int i = 0; i < NUM_OF_RACKS; i++) {
+                        initialize_sram(tors[i]->sram);
+                        initialize_dm_sram(tors[i]->dm_sram);
+                    }
                 }
-                break;
-            case 's':
-                sram_size = atoi(optarg);
-                printf("Using SRAM size of %d\n", sram_size);
                 break;
             case 'f': 
                 if (strlen(optarg) < 500) {

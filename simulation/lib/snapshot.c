@@ -25,7 +25,7 @@ snapshot_t * create_snapshot(buffer_t * buffer, int16_t start_idx, int16_t * pkt
             }
         }
         else {
-            snapshot->flow_id[i] =  0;
+            snapshot->flow_id[i] = 0;
             snapshot->queue_delay_kb[i] = 0;
         }
     }

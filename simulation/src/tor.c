@@ -60,17 +60,13 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id)
         int64_t val = access_sram(tor->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
-#endif
+            printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
             pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
-#endif
+            printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             if (tor->snapshot_idx[spine_id] > 0) {
                 tor->snapshot_idx[spine_id]--;
             }
@@ -90,17 +86,13 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id)
         int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
-#endif
+            printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
             dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
-#endif
+            printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             if (tor->snapshot_idx[spine_id] > 0) {
                 tor->snapshot_idx[spine_id]--;
             }
@@ -126,17 +118,13 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram)
         }
         // Cache miss
         if (val < 0) {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Miss Flow %d", tor->tor_index, (int) pkt->flow_id);
-#endif
+            printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
             pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
-#ifdef DEBUG_MEMORY
-            printf("Tor %d Cache Hit Flow %d: %d", tor->tor_index, (int) pkt->flow_id, (int) val);
-#endif
+            printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
         }
     }

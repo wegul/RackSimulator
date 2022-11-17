@@ -36,7 +36,13 @@ sram_t * create_sram(int32_t size, int16_t initialize);
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize);
 dram_t * create_dram(int32_t size, int32_t delay);
 
+void push(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, lru_node_t * node);
+lru_node_t * pop(lru_node_t ** head_ptr, lru_node_t ** tail_ptr);
+lru_node_t * remove_node(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, int64_t flow_id);
+
 void initialize_sram(sram_t * sram);
+void initialize_dm_sram(dm_sram_t * dm_sram);
+
 int64_t evict_from_sram(sram_t * sram, dram_t * dram);
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t access_sram(sram_t * sram, int64_t flow_id);

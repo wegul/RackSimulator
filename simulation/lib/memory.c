@@ -11,6 +11,82 @@ lru_node_t * create_lru_node(int64_t flow_id, int64_t val) {
     return node;
 }
 
+void push(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, lru_node_t * node) {
+    node->next = (*head_ptr);
+    node->prev = NULL;
+
+    if (*tail_ptr == NULL) {
+        (*tail_ptr) = node;
+    }
+    else {
+        (*head_ptr)->prev = node;
+    }
+
+    (*head_ptr) = node;
+}
+
+lru_node_t * pop(lru_node_t ** head_ptr, lru_node_t ** tail_ptr) {
+    if (*head_ptr == *tail_ptr) {
+        lru_node_t * node = *tail_ptr;
+        (*head_ptr) = NULL;
+        (*tail_ptr) = NULL;
+        return node;
+    }
+    lru_node_t * new_tail = NULL;
+    if ((*tail_ptr) != NULL) {
+        new_tail = (*tail_ptr)->prev;
+    }
+    new_tail->next = NULL;
+    lru_node_t * node = *tail_ptr;
+    (*tail_ptr) = new_tail;
+    return node;
+}
+
+lru_node_t * remove_node(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, int64_t flow_id) {
+    lru_node_t * curr = *head_ptr;
+
+    if (*head_ptr == *tail_ptr) {
+        if (*head_ptr == NULL) {
+            return NULL;
+        }
+        if ((*head_ptr)->flow_id == flow_id) {
+            (*head_ptr) = NULL;
+            (*tail_ptr) = NULL;
+            return curr;
+        }
+    }
+    while (curr != NULL) {
+        if (curr->flow_id == flow_id) {
+            if (curr == (*head_ptr) && curr == (*tail_ptr)) {
+                (*head_ptr) = NULL;
+                (*tail_ptr) = NULL;
+                return curr;
+            }
+            else if (curr == (*head_ptr)) {
+                lru_node_t * new_head = (*head_ptr)->next;
+                new_head->prev = NULL;
+                (*head_ptr) = new_head;
+                return curr;
+            }
+            else if (curr == (*tail_ptr)) {
+                lru_node_t * new_tail = (*tail_ptr)->prev;
+                new_tail->next = NULL;
+                (*tail_ptr) = new_tail;
+                return curr;
+            }
+            else {
+                curr->prev->next = curr->next;
+                curr->next->prev = curr->prev;
+                return curr;
+            }
+        }
+        else {
+            curr = curr->next;
+        }
+    }
+    return NULL;
+}
+
 sram_t * create_sram(int32_t size, int16_t initialize) {
     sram_t * sram = malloc(sizeof(sram_t));
     MALLOC_TEST(sram, __LINE__);
@@ -73,18 +149,21 @@ void initialize_sram(sram_t * sram) {
     sram->count = sram->capacity;
 }
 
+void initialize_dm_sram(dm_sram_t * sram) {
+    for (int i = 0; i < sram->capacity; i++) {
+        sram->flow_ids[i] = i;
+    }
+}
+
 int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
     lru_node_t * tail = sram->tail;
     if (tail != NULL) {
-        sram->tail = tail->prev;
-        if (sram->tail != NULL) {
-            sram->tail->next = NULL;
-        }
-        int64_t flow_id = tail->flow_id;
-        int64_t val = tail->val;
-        free(tail);
+        lru_node_t * evicted = pop(&(sram->head), &(sram->tail));
         sram->count--;
-        dram->memory[flow_id] = val;
+        int64_t flow_id = evicted->flow_id;
+        int64_t val = evicted->val;
+        dram->memory[flow_id % DRAM_SIZE] = val;
+        free(evicted);
         return flow_id;
     }
     else {
@@ -94,15 +173,8 @@ int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
 }
 
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
-    lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id]);
-    if (sram->head != NULL) {
-        sram->head->prev = node;
-        node->next = sram->head;
-    }
-    if (sram->tail == NULL) {
-        sram->tail = node;
-    }
-    sram->head = node;
+    lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id % DRAM_SIZE]);
+    push(&(sram->head), &(sram->tail), node);
     sram->count++;
     if (sram->count > sram->capacity) {
         evict_from_sram(sram, dram);
@@ -111,27 +183,15 @@ int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
 }
 
 int64_t access_sram(sram_t * sram, int64_t flow_id) {
-    lru_node_t * node = sram->head;
-    while (node != NULL) {
-        if (node->flow_id == flow_id) {
-            // Cache hit, bring to front
-            if (node != sram->head) {
-                node->prev->next = node->next;
-                if (node != sram->tail) {
-                    node->next->prev = node->prev;
-                }
-                node->prev = NULL;
-                node->next = sram->head;
-                sram->head->prev = node;
-                sram->head = node;
-            }
-            node->val++;
-            return node->val; // SUCCESS!!!
-        }
-        node = node->next;
+    lru_node_t * node = remove_node(&(sram->head), &(sram->tail), flow_id);
+    if (node != NULL) {
+        // Cache hit
+        node->val++;
+        push(&(sram->head), &(sram->tail), node);
+        return node->val;
     }
     // Cache miss
-    return -1; // FAILURE!!!
+    return -1;
 }
 
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {

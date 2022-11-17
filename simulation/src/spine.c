@@ -48,17 +48,13 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num)
         int64_t val = access_sram(spine->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-#ifdef DEBUG_MEMORY
-            printf("Spine %d Cache Miss Flow %d", spine->spine_index, (int) pkt->flow_id);
-#endif
+            printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
-#ifdef DEBUG_MEMORY
-            printf("Spine %d Cache Hit Flow %d: %d", spine->spine_index, (int) pkt->flow_id, (int) val);
-#endif
+            printf("Spine %d Cache Hit Flow %d: %d\n", spine->spine_index, (int) pkt->flow_id, (int) val);
             if (spine->snapshot_idx[tor_num] > 0) {
                 spine->snapshot_idx[tor_num]--;
             }
@@ -79,17 +75,13 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num)
         int64_t val = access_dm_sram(spine->dm_sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-#ifdef DEBUG_MEMORY
-            printf("Spine %d Cache Miss Flow %d", spine->spine_index, (int) pkt->flow_id);
-#endif
+            printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
-#ifdef DEBUG_MEMORY
-            printf("Spine %d Cache Hit Flow %d: %d", spine->spine_index, (int) pkt->flow_id, (int) val);
-#endif
+            printf("Spine %d Cache Hit Flow %d: %d\n", spine->spine_index, (int) pkt->flow_id, (int) val);
             if (spine->snapshot_idx[tor_num] > 0) {
                 spine->snapshot_idx[tor_num]--;
             }

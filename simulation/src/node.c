@@ -78,7 +78,10 @@ void track_ecn(node_t self, int16_t flow_id, int16_t ecn_mark) {
 void free_node(node_t self)
 {
     if (self != NULL) {
-        free_buffer(self->active_flows);
+        // Flows should already be freed by freeing the flowlist
+        //free_buffer(self->active_flows);
+        free(self->active_flows->buffer);
+        free(self->active_flows);
         free(self);
     }
 }
