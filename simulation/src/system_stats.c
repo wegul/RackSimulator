@@ -1,9 +1,26 @@
 #include "system_stats.h"
 
-void print_system_stats(spine_t * spines, tor_t * tors) {
+void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int64_t ns, int64_t cache_misses, int64_t cache_hits) {
+    print_network_tput(total_bytes, ns);
+    print_cache_stats(cache_misses, cache_hits);
     print_spine_stats(spines);
     print_tor_stats(tors);
 }
+
+void print_network_tput(int64_t total_bytes, int64_t ns) {
+    printf("Total bytes received: %ld B\n", total_bytes);
+    printf("Full Network Throughput: %0.2f Gbps\n", (double) total_bytes * 8 / ns);
+}
+
+void print_cache_stats(int64_t cache_misses, int64_t cache_hits) {
+    printf("Number of cache accesses: %ld\n", cache_misses + cache_hits);
+    printf("Number of cache hits: %ld\n", cache_hits);
+    printf("Number of cache misses: %ld\n", cache_misses);
+    if (cache_misses + cache_hits > 0) {
+        printf("Percent of cache access misses: %0.2f%%\n", (double) cache_misses * 100 / (cache_misses + cache_hits));
+    }
+}
+    
 
 void print_spine_stats(spine_t * spines) {
     for (int i = 0; i < NUM_OF_SPINES; i++) {

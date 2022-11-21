@@ -28,12 +28,15 @@ int8_t buffer_insert(buffer_t * self, void * element, int32_t index) {
             new_buffer = (void **) malloc(self->size * sizeof(void *));
             MALLOC_TEST(new_buffer, __LINE__);
             for (int i = 0; i < self->size; i++) {
-                new_buffer[i] = NULL;
+                if (i < self->size / 2) {
+                    new_buffer[i] = self->buffer[i];
+                }
+                else {
+                    new_buffer[i] = NULL;
+                }
             }
-            memcpy(new_buffer, self->buffer, (self->size * sizeof(void *) / 2));
             free(self->buffer);
             self->buffer = new_buffer;
-            //self->buffer = (void**) realloc(self->buffer, self->size * sizeof(void*));
         }
         for (int i = self->num_elements - 1; i > index; i--) {
             self->buffer[i] = self->buffer[i-1];

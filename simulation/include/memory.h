@@ -29,6 +29,7 @@ typedef struct dram {
     int32_t delay;
     int32_t capacity;
     int64_t * memory;
+    int * accessible;
 } dram_t;
 
 lru_node_t * create_lru_node(int64_t flow_id, int64_t val);

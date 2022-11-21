@@ -113,7 +113,12 @@ dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
             sram->flow_ids[i] = i;
         }
         else {
-            sram->flow_ids[i] = 0;
+            if (i == 0) {
+                sram->flow_ids[i] = 1;
+            }
+            else {
+                sram->flow_ids[i] = 0;
+            }
         }
         sram->memory[i] = 0;
     }
@@ -127,9 +132,12 @@ dram_t * create_dram(int32_t size, int32_t delay) {
     dram->capacity = size;
     dram->delay = delay;
     dram->memory = malloc(sizeof(int64_t) * size); // Contains value associated with flow_id (i.e. val)
+    dram->accessible = malloc(sizeof(int) * size); // When using DRAM-only, shows which values are accessible at any given moment
     for (int i = 0; i < size; i++) {
         dram->memory[i] = 0;
+        dram->accessible[i] = 0;
     }
+    
 
     return dram;
 }
@@ -207,10 +215,10 @@ int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
 }
 
 int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id) {
-    if (sram->flow_ids[flow_id % sram->capacity] == flow_id) {
+    if (sram->flow_ids[(flow_id % sram->capacity)] == flow_id) {
         // Cache hit
         sram->memory[flow_id % sram->capacity]++;
-        return sram->memory[flow_id % sram->capacity]; // SUCCESS!!!
+        return sram->memory[(flow_id % sram->capacity)]; // SUCCESS!!!
     }
     // Cache miss
     return -1; // FAILURE!!!
@@ -235,5 +243,6 @@ void free_dm_sram(dm_sram_t * sram) {
 
 void free_dram(dram_t * dram) {
     free(dram->memory);
+    free(dram->accessible);
     free(dram);
 }

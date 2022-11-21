@@ -1,5 +1,6 @@
 .vscode
 simulation/bin
 simulation/obj
+simulation/out
 simulation/trace*
-simulation/out/trace*
+simulation/max*

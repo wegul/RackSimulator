@@ -27,10 +27,11 @@ typedef struct spine* spine_t;
 
 extern spine_t* spines;
 
-spine_t create_spine(int16_t, int16_t, int16_t);
+spine_t create_spine(int16_t, int32_t, int16_t);
 void free_spine(spine_t);
-packet_t send_to_tor(spine_t, int16_t);
-packet_t send_to_tor_dm(spine_t, int16_t);
+packet_t send_to_tor(spine_t, int16_t, int64_t *, int64_t *);
+packet_t send_to_tor_dm(spine_t, int16_t, int64_t *, int64_t *);
+packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_misses);
 snapshot_t * snapshot_to_tor(spine_t, int16_t);
 int64_t spine_buffer_bytes(spine_t, int);
 
