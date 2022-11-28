@@ -10,6 +10,7 @@ struct node {
     int16_t node_index;
 
     buffer_t * active_flows;
+    flow_t * current_flow;
     
     int64_t seq_num[MAX_FLOW_ID]; //to be put into the packets
     int64_t ack_num[MAX_FLOW_ID];

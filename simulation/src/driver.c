@@ -18,6 +18,9 @@ int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAM
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
 int32_t sram_size = (int32_t) SRAM_SIZE;
+int32_t sram_pct = 100; // Percent of flows handled in SRAM
+int burst_size = 3; // Number of packets to send in a burst
+double load = 1.0; // Network load 
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
 int64_t total_bytes_rcvd = 0;
@@ -136,74 +139,117 @@ void work_per_timeslot()
         for (int i = 0; i < NUM_OF_NODES; ++i) {
             node_t node = nodes[i];
             int16_t node_index = node->node_index;
-
             // Check if host has any active flows at current moment
-            if ((node->active_flows)->num_elements > 0) {
-                flow_t * flow = buffer_peek(node->active_flows, 0);
-                if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
-                    // Take out first flow allowed to send packets currently
-                    flow = buffer_get(node->active_flows);
-                    int16_t src_node = flow->src;
-                    int16_t dst_node = flow->dst;
-                    int64_t flow_id = flow->flow_id;
-
-                    // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
-                    int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
-                    int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
-                    if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
-                        // Determine how large the packet will be
-                        int64_t size = 1500;
-                        if (cwnd_bytes_remaining < 1500) {
-                            size = cwnd_bytes_remaining;
-                        }
-                        if (flow_bytes_remaining < size) {
-                            size = flow_bytes_remaining;
-                        }
-                        assert(size > 0);
-
-                        // Create packet
-                        packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
-                        packet_counter++;
-                        node->seq_num[dst_node] += size;
-
-                        // Send packet
-                        pkt->time_when_transmitted_from_src = curr_timeslot;
-                        int16_t dst_tor = node_index / NODES_PER_RACK;
-                        pkt->time_to_dequeue_from_link = curr_timeslot +
-                            per_hop_propagation_delay_in_timeslots;
-                        link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+            if ((node->active_flows)->num_elements > 0 || node->current_flow != NULL) {
+                flow_t * flow = NULL;
+                // Time to select a new burst flow
+                if (curr_timeslot % burst_size == 0 || node->current_flow == NULL) {
+                    // Return the current flow back to the active flows list
+                    if (node->current_flow != NULL) {
 #ifdef DEBUG_DRIVER
-                        printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
-                        print_packet(pkt);
+                        printf("%d: Returning flow %d after finishing burst\n", (int) curr_timeslot, (int) node->current_flow->flow_id);
 #endif
-
-                        // Update flow state
-                        if (flow->active == 0) {
-                            flowlist->active_flows++;
-                            flow->start_timeslot = curr_timeslot;
-                            total_flows_started++;
-#ifdef DEBUG_DRIVER 
-                            printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
-#endif
-                        }
-
-                        flow->active = 1;
-                        flow->pkts_sent++;
-                        flow->bytes_sent += size;
-                        flow->timeslots_active++;
-                        // Determine if last packet of flow has been sent
-                        if (flow->pkts_sent >= flow->flow_size) {
-                            flow->active = 0;
-                            flowlist->active_flows--;
-#ifdef DEBUG_DRIVER
-                            printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
-#endif
-                        }
+                        buffer_put(node->active_flows, node->current_flow);
+                        node->current_flow = NULL;
                     }
-                    
-                    // Return flow back to active flows if it is not complete
-                    if (flow_bytes_remaining > 0) {
+                    // Randomly select a new active flow to start
+                    int32_t num_af = node->active_flows->num_elements;
+                    int32_t selected = (int32_t) rand() % num_af;
+                    flow = buffer_remove(node->active_flows, selected);
+                    // If flow is not active yet, return it to flow list
+                    if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
                         buffer_put(node->active_flows, flow);
+                        flow = NULL;
+#ifdef DEBUG_DRIVER
+                        printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
+#endif
+                    }
+
+                    else {
+                        node->current_flow = flow;
+#ifdef DEBUG_DRIVER
+                        printf("%d: Node %d has started new burst on flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
+#endif
+                    }
+                }
+                // Burst size has not been reached; keep sending from current flow
+                else {
+#ifdef DEBUG_DRIVER
+                    printf("%d: Node %d contiuing to send burst from flow %d\n", (int) curr_timeslot, (int) node_index, (int) node->current_flow->flow_id);
+#endif
+                    flow = node->current_flow;
+                }
+                // Send packet if random generates number below load ratio
+                if ((double) rand() / (double) RAND_MAX < load) {        
+                    if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
+                        int16_t src_node = flow->src;
+                        int16_t dst_node = flow->dst;
+                        int64_t flow_id = flow->flow_id;
+
+                        // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
+                        int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
+                        int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
+                        if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
+                            // Determine how large the packet will be
+                            int64_t size = 1500;
+                            if (cwnd_bytes_remaining < 1500) {
+                                size = cwnd_bytes_remaining;
+                            }
+                            if (flow_bytes_remaining < size) {
+                                size = flow_bytes_remaining;
+                            }
+                            assert(size > 0);
+
+                            // Create packet
+                            packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
+                            packet_counter++;
+                            node->seq_num[dst_node] += size;
+
+                            // Send packet
+                            pkt->time_when_transmitted_from_src = curr_timeslot;
+                            int16_t dst_tor = node_index / NODES_PER_RACK;
+                            pkt->time_to_dequeue_from_link = curr_timeslot +
+                                per_hop_propagation_delay_in_timeslots;
+                            link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+    #ifdef DEBUG_DRIVER
+                            printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
+                            print_packet(pkt);
+    #endif
+
+                            // Update flow state
+                            if (flow->active == 0) {
+                                flowlist->active_flows++;
+                                flow->start_timeslot = curr_timeslot;
+                                total_flows_started++;
+    #ifdef DEBUG_DRIVER 
+                                printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
+    #endif
+                            }
+
+                            flow->active = 1;
+                            flow->pkts_sent++;
+                            flow->bytes_sent += size;
+                            flow->timeslots_active++;
+                            // Determine if last packet of flow has been sent
+                            if (flow->pkts_sent >= flow->flow_size) {
+                                flow->active = 0;
+                                flowlist->active_flows--;
+    #ifdef DEBUG_DRIVER
+                                printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
+    #endif
+                            }
+                        }
+
+                        // Set current flow back to null if there are no more bytes left to send from this flow
+                        if (flow_bytes_remaining < 1) {
+                            node->current_flow = NULL;
+                        }
+                        
+                        // Return flow back to active flows if it is not complete
+                        //if (flow_bytes_remaining > 0) {
+                        //    buffer_put(node->active_flows, flow);
+                        //    node->current_flow = NULL;
+                        //}
                     }
                 }
             }
@@ -580,7 +626,7 @@ void process_args(int argc, char ** argv) {
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -644,6 +690,27 @@ void process_args(int argc, char ** argv) {
                 else {
                     printf("SRAM is enabled\n");
                 }
+                break;
+            case 's':
+                sram_pct = atoi(optarg);
+                sram_size = sram_pct * flowlist->num_flows / NUM_OF_RACKS / 100;
+                for (int i = 0; i < NUM_OF_SPINES; i++) {
+                    spines[i]->sram->capacity = sram_size;
+                    spines[i]->dm_sram->capacity = sram_size;
+                }
+                for (int i = 0; i < NUM_OF_RACKS; i++) {
+                    tors[i]->sram->capacity = sram_size;
+                    tors[i]->dm_sram->capacity = sram_size;
+                }
+                printf("Utilizing SRAM ratio of %d%% for an SRAM size of %d\n", sram_pct, sram_size);
+                break;
+            case 'u':
+                burst_size = atoi(optarg);
+                printf("Using packet burst size of %d\n", burst_size);
+                break;
+            case 'l':
+                load = atof(optarg);
+                printf("Using a load of %0.1f\n", load);
                 break;
             case 'f': 
                 if (strlen(optarg) < 500) {

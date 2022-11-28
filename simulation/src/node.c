@@ -8,6 +8,7 @@ node_t create_node(int16_t node_index)
     self->node_index = node_index;
     
     self->active_flows = create_buffer(MAX_FLOW_ID);
+    self->current_flow = NULL;
 
     for (int i = 0; i < MAX_FLOW_ID; ++i) {
         self->seq_num[i] = 0;

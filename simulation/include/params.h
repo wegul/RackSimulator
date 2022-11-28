@@ -49,7 +49,7 @@
 
 #define LINK_CAPACITY 50
 
-#define MAX_FLOW_ID 100000
+#define MAX_FLOW_ID 1010000
 #define RTABLE_SIZE MAX_FLOW_ID
 #define ECN_CUTOFF_TOR_UP 38
 #define ECN_CUTOFF_TOR_DOWN 70
@@ -60,7 +60,7 @@
 #define INTERPACKET_GAP 96
 #define SNAPSHOT_SIZE 4
 #define SRAM_SIZE 100000
-#define DRAM_SIZE 100000
+#define DRAM_SIZE MAX_FLOW_ID
 #define DRAM_DELAY 60
 
 extern int16_t*** source_list;
