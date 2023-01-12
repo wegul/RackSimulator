@@ -203,8 +203,9 @@ int64_t access_sram(sram_t * sram, int64_t flow_id) {
 }
 
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
-    dram->memory[flow_id] = sram->memory[flow_id % sram->capacity];
-    return flow_id;
+    int64_t evict_id = sram->flow_ids[flow_id % sram->capacity];
+    dram->memory[evict_id] = sram->memory[evict_id % sram->capacity];
+    return evict_id;
 }
 
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
@@ -215,7 +216,7 @@ int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
 }
 
 int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id) {
-    if (sram->flow_ids[(flow_id % sram->capacity)] == flow_id) {
+    if (sram->flow_ids[flow_id % sram->capacity] == flow_id) {
         // Cache hit
         sram->memory[flow_id % sram->capacity]++;
         return sram->memory[(flow_id % sram->capacity)]; // SUCCESS!!!

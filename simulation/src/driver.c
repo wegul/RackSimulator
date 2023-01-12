@@ -15,10 +15,9 @@ int packet_counter = 0;
 int num_datapoints = 100000;
 
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
-int init_sram = 0; // Value of 1 = initialize SRAM
+int init_sram = 1; // Value of 1 = initialize SRAM
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
-int32_t sram_size = (int32_t) SRAM_SIZE;
-int32_t sram_pct = 100; // Percent of flows handled in SRAM
+int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 3; // Number of packets to send in a burst
 double load = 1.0; // Network load 
 int64_t cache_misses = 0;
@@ -625,6 +624,7 @@ void process_args(int argc, char ** argv) {
     char out_suffix[4] = ".out";
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
+    int sram_set = 0;
 
     while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:")) != -1) {
         switch(opt) {
@@ -692,17 +692,9 @@ void process_args(int argc, char ** argv) {
                 }
                 break;
             case 's':
-                sram_pct = atoi(optarg);
-                sram_size = sram_pct * flowlist->num_flows / NUM_OF_RACKS / 100;
-                for (int i = 0; i < NUM_OF_SPINES; i++) {
-                    spines[i]->sram->capacity = sram_size;
-                    spines[i]->dm_sram->capacity = sram_size;
-                }
-                for (int i = 0; i < NUM_OF_RACKS; i++) {
-                    tors[i]->sram->capacity = sram_size;
-                    tors[i]->dm_sram->capacity = sram_size;
-                }
-                printf("Utilizing SRAM ratio of %d%% for an SRAM size of %d\n", sram_pct, sram_size);
+                sram_set = 1;
+                sram_size = atoi(optarg);
+                printf("Utilizing SRAM size of %d\n", sram_size);
                 break;
             case 'u':
                 burst_size = atoi(optarg);
@@ -757,6 +749,14 @@ void process_args(int argc, char ** argv) {
     }
 
     read_tracefile(filename);
+    for (int i = 0; i < NUM_OF_SPINES; i++) {
+        spines[i]->sram->capacity = sram_size;
+        spines[i]->dm_sram->capacity = sram_size;
+    }
+    for (int i = 0; i < NUM_OF_RACKS; i++) {
+        tors[i]->sram->capacity = sram_size;
+        tors[i]->dm_sram->capacity = sram_size;
+    }
     out_fp = open_outfile(out_filename);
 #ifdef WRITE_QUEUELENS
     timeseries_fp = open_timeseries_outfile(timeseries_filename);

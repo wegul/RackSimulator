@@ -89,14 +89,14 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id, int64_t * cache_misses, i
         // Cache miss
         if (val < 0) {
             (*cache_misses)++;
-            // printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
+            //printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
             dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
             return NULL;
         }
         // Cache hit
         else {
             (*cache_hits)++;
-            // printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
+            //printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             if (tor->snapshot_idx[spine_id] > 0) {
                 tor->snapshot_idx[spine_id]--;
             }
@@ -115,17 +115,19 @@ packet_t send_to_spine_dram_only(tor_t tor, int16_t spine_id, int64_t * cache_mi
     if (pkt != NULL) {
         if (tor->dram->accessible[pkt->flow_id] > 0) {
             tor->dram->accessible[pkt->flow_id] = 0;
+            //printf("Send on flow %d\n", pkt->flow_id);
             pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
             return pkt;
         }
         else {
             (*cache_misses)++;
+            //printf("Enabled flow %d\n", pkt->flow_id);
             tor->dram->accessible[pkt->flow_id] = 1;
             return NULL;
         }
     }
     
-    return pkt;
+    return NULL;
 }
 
 packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64_t * cache_misses, int64_t * cache_hits)
@@ -144,7 +146,7 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
         // Cache miss
         if (val < 0) {
             (*cache_misses)++;
-            // printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
+            //printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
             if (fa_sram > 0) {
                 pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
             }
@@ -156,7 +158,7 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
         // Cache hit
         else {
             (*cache_hits)++;
-            // printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
+            //printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
         }
     }
