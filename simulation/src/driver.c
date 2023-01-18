@@ -1,7 +1,7 @@
 #include "driver.h"
 
 // Default values for simulation
-static int pkt_size = 1500; //in bytes
+static int pkt_size = MTU; //in bytes
 static float link_bandwidth = 100; //in Gbps
 static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
@@ -15,7 +15,7 @@ int packet_counter = 0;
 int num_datapoints = 100000;
 
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
-int init_sram = 1; // Value of 1 = initialize SRAM
+int init_sram = 0; // Value of 1 = initialize SRAM
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 3; // Number of packets to send in a burst
@@ -190,8 +190,8 @@ void work_per_timeslot()
                         int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
                         if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
                             // Determine how large the packet will be
-                            int64_t size = 1500;
-                            if (cwnd_bytes_remaining < 1500) {
+                            int64_t size = MTU;
+                            if (cwnd_bytes_remaining < MTU) {
                                 size = cwnd_bytes_remaining;
                             }
                             if (flow_bytes_remaining < size) {
