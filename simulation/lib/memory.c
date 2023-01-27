@@ -107,6 +107,7 @@ dram_t * create_dram(int32_t size, int32_t delay) {
     MALLOC_TEST(dram, __LINE__);
     dram->capacity = size;
     dram->delay = delay;
+    dram->accesses = 1;
     dram->memory = malloc(sizeof(int64_t) * size); // Contains value associated with flow_id (i.e. val)
     dram->accessible = malloc(sizeof(int) * size); // When using DRAM-only, shows which values are accessible at any given moment
     for (int i = 0; i < size; i++) {

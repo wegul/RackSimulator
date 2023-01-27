@@ -50,8 +50,8 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
         if (val < 0) {
             // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             (*cache_misses)++;
-            spine->dram->accessible[pkt->flow_id]++;
-            if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
+            spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
+            if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
                 spine->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
             }
@@ -83,8 +83,8 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num, int64_t * cache_misses, 
         if (val < 0) {
             //printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             (*cache_misses)++;
-            spine->dram->accessible[pkt->flow_id]++;
-            if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
+            spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
+            if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
                 spine->dram->accessible[pkt->flow_id] = 0;
                 dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
             }

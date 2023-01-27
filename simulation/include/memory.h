@@ -25,6 +25,7 @@ typedef struct dm_sram {
 
 typedef struct dram {
     int32_t delay;
+    int32_t accesses;
     int32_t capacity;
     int64_t * memory;
     int * accessible;

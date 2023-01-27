@@ -12,6 +12,7 @@ float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
 int dram_access_time = DRAM_DELAY;
 int timeslots_per_dram_access = 1;
+int accesses_per_timeslot = 1;
 volatile int64_t curr_timeslot = 0; //extern var
 int packet_counter = 0;
 int num_datapoints = 100000;
@@ -754,6 +755,9 @@ void process_args(int argc, char ** argv) {
 
     timeslots_per_dram_access = dram_access_time / timeslot_len + (dram_access_time % (int) timeslot_len != 0);
     printf("Timeslots per DRAM access %d\n", timeslots_per_dram_access);
+
+    accesses_per_timeslot = timeslot_len / dram_access_time + ((int) timeslot_len % dram_access_time != 0);
+    printf("DRAM accesses per timeslot %d\n", accesses_per_timeslot);
 
     DIR * dir = opendir("out/");
     if (dir) {
