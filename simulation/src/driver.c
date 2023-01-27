@@ -10,12 +10,15 @@ static int snapshot_epoch = 1; //timeslots between snapshots
 int16_t header_overhead = 64;
 float per_hop_propagation_delay_in_ns = 100;
 int per_hop_propagation_delay_in_timeslots;
+int dram_access_time = DRAM_DELAY;
+int timeslots_per_dram_access = 1;
 volatile int64_t curr_timeslot = 0; //extern var
 int packet_counter = 0;
 int num_datapoints = 100000;
 
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAM
+int program_tors = 0; // Value of 1 = ToRs are programmable
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 3; // Number of packets to send in a burst
@@ -23,6 +26,7 @@ double load = 1.0; // Network load
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
 int64_t total_bytes_rcvd = 0;
+int64_t total_pkts_rcvd = 0;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
@@ -97,7 +101,7 @@ void work_per_timeslot()
                         pkt = send_to_tor_dram_only(spine, k, &cache_misses);
                     }
                     else if (fully_associative > 0) {
-                        pkt = send_to_tor(spine, k, &cache_misses, &cache_hits);
+                        pkt = send_to_tor(spine, k, &cache_misses, &cache_hits, curr_timeslot);
                     }
                     else {
                         pkt = send_to_tor_dm(spine, k, &cache_misses, &cache_hits);
@@ -280,7 +284,10 @@ void work_per_timeslot()
                 packet_t peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = NULL;
-                    if (enable_sram == 0) {
+                    if (program_tors == 0) {
+                        pkt = send_to_spine_baseline(tor, tor_port);
+                    }
+                    else if (enable_sram == 0) {
                         pkt = send_to_spine_dram_only(tor, tor_port, &cache_misses);
                     }
                     else if (fully_associative > 0) {
@@ -321,7 +328,10 @@ void work_per_timeslot()
                 packet_t peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = NULL;
-                    if (enable_sram == 0) {
+                    if (program_tors == 0) {
+                        pkt = send_to_host_baseline(tor, tor_port);
+                    }
+                    else if (enable_sram == 0) {
                         pkt = send_to_host_dram_only(tor, tor_port, &cache_misses);
                     }
                     else {
@@ -521,6 +531,7 @@ void work_per_timeslot()
                     flow->pkts_received++;
                     flow->bytes_received += pkt->size;
                     total_bytes_rcvd += pkt->size;
+                    total_pkts_rcvd++;
 
                     if (flow->pkts_received == flow->flow_size) {
                         assert(flow->bytes_sent == flow->bytes_received);
@@ -624,9 +635,8 @@ void process_args(int argc, char ** argv) {
     char out_suffix[4] = ".out";
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
-    int sram_set = 0;
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:p:k:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -662,10 +672,10 @@ void process_args(int argc, char ** argv) {
             case 'a':
                 fully_associative = atoi(optarg);
                 if (fully_associative == 0) {
-                    printf("Using direct-mapped SRAM of size %d\n", sram_size);
+                    printf("Using direct-mapped SRAM\n");
                 }
                 else {
-                    printf("Using fully-associative SRAM of size %d\n", sram_size);
+                    printf("Using fully-associative SRAM\n");
                 }
                 break;
             case 'i':
@@ -692,9 +702,8 @@ void process_args(int argc, char ** argv) {
                 }
                 break;
             case 's':
-                sram_set = 1;
                 sram_size = atoi(optarg);
-                printf("Utilizing SRAM size of %d\n", sram_size);
+                printf("Utilizing SRAM size of %d\n", (int) sram_size);
                 break;
             case 'u':
                 burst_size = atoi(optarg);
@@ -703,6 +712,14 @@ void process_args(int argc, char ** argv) {
             case 'l':
                 load = atof(optarg);
                 printf("Using a load of %0.1f\n", load);
+                break;
+            case 'p':
+                program_tors = atof(optarg);
+                printf("Enabling programmable ToRs\n");
+                break;
+            case 'k':
+                int dram_access_time = atof(optarg);
+                printf("DRAM access speed is %d ns\n", dram_access_time);
                 break;
             case 'f': 
                 if (strlen(optarg) < 500) {
@@ -734,7 +751,9 @@ void process_args(int argc, char ** argv) {
     
     bytes_per_timeslot = (int) (timeslot_len * link_bandwidth / 8);
     printf("Bytes sent per timeslot %d\n", bytes_per_timeslot);
-    printf("\n");
+
+    timeslots_per_dram_access = dram_access_time / timeslot_len + (dram_access_time % (int) timeslot_len != 0);
+    printf("Timeslots per DRAM access %d\n", timeslots_per_dram_access);
 
     DIR * dir = opendir("out/");
     if (dir) {
@@ -752,6 +771,7 @@ void process_args(int argc, char ** argv) {
     for (int i = 0; i < NUM_OF_SPINES; i++) {
         spines[i]->sram->capacity = sram_size;
         spines[i]->dm_sram->capacity = sram_size;
+        spines[i]->dram->delay = timeslots_per_dram_access;
     }
     for (int i = 0; i < NUM_OF_RACKS; i++) {
         tors[i]->sram->capacity = sram_size;
@@ -781,6 +801,7 @@ void read_tracefile(char * filename) {
         int timeslot = -1;
         
         while (fscanf(fp, "%d,%d,%d,%d,%d,%d", &flow_id, &src, &dst, &flow_size_bytes, &flow_size_pkts, &timeslot) == 6 && flow_id < MAX_FLOW_ID) {
+            flow_size_pkts = flow_size_bytes / MTU;
             initialize_flow(flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);
             // Final timeslot is start time of last flow
             max_timeslots = timeslot;
@@ -913,7 +934,7 @@ int main(int argc, char** argv) {
     process_args(argc, argv);
     
     work_per_timeslot();
-    print_system_stats(spines, tors, total_bytes_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits);
+    print_system_stats(spines, tors, total_bytes_rcvd, total_pkts_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits);
 #ifdef WRITE_QUEUELENS
     write_to_timeseries_outfile(timeseries_fp, spines, tors, curr_timeslot, num_datapoints);
 #endif

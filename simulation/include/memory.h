@@ -7,7 +7,6 @@ typedef struct lru_node {
     int64_t flow_id;
     int64_t val;
     struct lru_node * next;
-    struct lru_node * prev;
 } lru_node_t;
 
 // Fully-associative SRAM
@@ -15,7 +14,6 @@ typedef struct sram {
     int32_t capacity;
     int32_t count;
     lru_node_t * head;
-    lru_node_t * tail;
 } sram_t;
 
 // Direct-mapped SRAM
@@ -37,9 +35,9 @@ sram_t * create_sram(int32_t size, int16_t initialize);
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize);
 dram_t * create_dram(int32_t size, int32_t delay);
 
-void push(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, lru_node_t * node);
-lru_node_t * pop(lru_node_t ** head_ptr, lru_node_t ** tail_ptr);
-lru_node_t * remove_node(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, int64_t flow_id);
+void push(lru_node_t ** head_ptr, lru_node_t * node);
+lru_node_t * pop(lru_node_t ** head_pt);
+lru_node_t * remove_node(lru_node_t ** head_ptr, int64_t flow_id);
 
 void initialize_sram(sram_t * sram);
 void initialize_dm_sram(dm_sram_t * dm_sram);

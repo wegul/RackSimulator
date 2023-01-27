@@ -38,7 +38,7 @@ void free_spine(spine_t self)
     }
 }
 
-packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int64_t * cache_hits)
+packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int64_t * cache_hits, int timeslot)
 {
     //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
@@ -50,7 +50,11 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
         if (val < 0) {
             // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             (*cache_misses)++;
-            pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
+            spine->dram->accessible[pkt->flow_id]++;
+            if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
+                spine->dram->accessible[pkt->flow_id] = 0;
+                pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
+            }
             return NULL;
         }
         // Cache hit
@@ -79,7 +83,12 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num, int64_t * cache_misses, 
         if (val < 0) {
             //printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
             (*cache_misses)++;
-            dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
+            spine->dram->accessible[pkt->flow_id]++;
+            if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
+                spine->dram->accessible[pkt->flow_id] = 0;
+                dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
+            }
+            
             return NULL;
         }
         // Cache hit
@@ -102,14 +111,17 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
 
     pkt = (packet_t) buffer_peek(spine->pkt_buffer[tor_num], 0);
     if (pkt != NULL) {
-        if (spine->dram->accessible[pkt->flow_id] > 0) {
+        if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
+            for (int i = 0; i < DRAM_SIZE; i++) {
+                spine->dram->accessible[i] = 0;
+            }
             spine->dram->accessible[pkt->flow_id] = 0;
             pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
             return pkt;
         }
         else {
             (*cache_misses)++;
-            spine->dram->accessible[pkt->flow_id] = 1;
+            spine->dram->accessible[pkt->flow_id]++;
             return NULL;
         }
     }

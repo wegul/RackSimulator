@@ -6,8 +6,8 @@
 #include "spine.h"
 #include "flow.h"
 
-void print_system_stats(spine_t * spines, tor_t * tors, int64_t bytes, int64_t ns, int64_t cache_misses, int64_t cache_hits);
-void print_network_tput(int64_t bytes, int64_t ns);
+void print_system_stats(spine_t * spines, tor_t * tors, int64_t bytes, int64_t pkts, int64_t ns, int64_t cache_misses, int64_t cache_hits);
+void print_network_tput(int64_t bytes, int64_t pkts, int64_t ns);
 void print_cache_stats(int64_t cache_misses, int64_t cache_hits);
 void print_spine_stats(spine_t * spines);
 void print_tor_stats(tor_t * tors);

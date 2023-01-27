@@ -1,15 +1,16 @@
 #include "system_stats.h"
 
-void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int64_t ns, int64_t cache_misses, int64_t cache_hits) {
-    print_network_tput(total_bytes, ns);
+void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int64_t total_pkts, int64_t ns, int64_t cache_misses, int64_t cache_hits) {
+    print_network_tput(total_bytes, total_pkts, ns);
     print_cache_stats(cache_misses, cache_hits);
     print_spine_stats(spines);
     print_tor_stats(tors);
 }
 
-void print_network_tput(int64_t total_bytes, int64_t ns) {
+void print_network_tput(int64_t total_bytes, int64_t total_pkts, int64_t ns) {
     printf("Total bytes received: %ld B\n", total_bytes);
     printf("Full Network Throughput: %0.2f Gbps\n", (double) total_bytes * 8 / ns);
+    printf("Packets per ns: %0.2f ppns\n", (double) total_pkts / ns);
 }
 
 void print_cache_stats(int64_t cache_misses, int64_t cache_hits) {
@@ -46,7 +47,7 @@ void print_tor_stats(tor_t * tors) {
         }
         printf("]\n");
 
-        printf("Max Downstream Queue Lens at Tor %d:\n[", i);
+        printf("Max Downstream Queue Lens at Tor %d:\n", i);
         for(int j = 0; j < NODES_PER_RACK; j++) {
             if (j != 0) {
                 printf(", ");

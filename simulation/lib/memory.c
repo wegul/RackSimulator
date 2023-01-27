@@ -6,84 +6,61 @@ lru_node_t * create_lru_node(int64_t flow_id, int64_t val) {
     node->flow_id = flow_id;
     node->val = val;
     node->next = NULL;
-    node->prev = NULL;
 
     return node;
 }
 
-void push(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, lru_node_t * node) {
+void push(lru_node_t ** head_ptr, lru_node_t * node) {
     node->next = (*head_ptr);
-    node->prev = NULL;
-
-    if (*tail_ptr == NULL) {
-        (*tail_ptr) = node;
-    }
-    else {
-        (*head_ptr)->prev = node;
-    }
-
     (*head_ptr) = node;
 }
 
-lru_node_t * pop(lru_node_t ** head_ptr, lru_node_t ** tail_ptr) {
-    if (*head_ptr == *tail_ptr) {
-        lru_node_t * node = *tail_ptr;
+lru_node_t * pop(lru_node_t ** head_ptr) {
+    if (*head_ptr == NULL) {
+        return NULL;
+    }
+
+    lru_node_t * node = (*head_ptr);
+    lru_node_t * next = node->next;
+
+    if (next == NULL) {
         (*head_ptr) = NULL;
-        (*tail_ptr) = NULL;
         return node;
     }
-    lru_node_t * new_tail = NULL;
-    if ((*tail_ptr) != NULL) {
-        new_tail = (*tail_ptr)->prev;
+
+    while(next->next != NULL) {
+        node = node->next;
+        next = node->next;
     }
-    new_tail->next = NULL;
-    lru_node_t * node = *tail_ptr;
-    (*tail_ptr) = new_tail;
-    return node;
+
+    node->next = NULL;
+    return next;
 }
 
-lru_node_t * remove_node(lru_node_t ** head_ptr, lru_node_t ** tail_ptr, int64_t flow_id) {
-    lru_node_t * curr = *head_ptr;
+lru_node_t * remove_node(lru_node_t ** head_ptr, int64_t flow_id) {
+    if (*head_ptr == NULL) {
+        return NULL;
+    }
 
-    if (*head_ptr == *tail_ptr) {
-        if (*head_ptr == NULL) {
-            return NULL;
-        }
-        if ((*head_ptr)->flow_id == flow_id) {
-            (*head_ptr) = NULL;
-            (*tail_ptr) = NULL;
-            return curr;
-        }
+    lru_node_t * curr = *head_ptr;
+    lru_node_t * next = curr->next;
+
+    if (curr->flow_id == flow_id) {
+        (*head_ptr) = next;
+        curr->next = NULL;
+        return curr;
     }
-    while (curr != NULL) {
-        if (curr->flow_id == flow_id) {
-            if (curr == (*head_ptr) && curr == (*tail_ptr)) {
-                (*head_ptr) = NULL;
-                (*tail_ptr) = NULL;
-                return curr;
-            }
-            else if (curr == (*head_ptr)) {
-                lru_node_t * new_head = (*head_ptr)->next;
-                new_head->prev = NULL;
-                (*head_ptr) = new_head;
-                return curr;
-            }
-            else if (curr == (*tail_ptr)) {
-                lru_node_t * new_tail = (*tail_ptr)->prev;
-                new_tail->next = NULL;
-                (*tail_ptr) = new_tail;
-                return curr;
-            }
-            else {
-                curr->prev->next = curr->next;
-                curr->next->prev = curr->prev;
-                return curr;
-            }
+
+    while (next != NULL) {
+        if (next->flow_id == flow_id) {
+            curr->next = next->next;
+            next->next = NULL;
+            return next;
         }
-        else {
-            curr = curr->next;
-        }
+        curr = next;
+        next = next->next;
     }
+    
     return NULL;
 }
 
@@ -93,7 +70,6 @@ sram_t * create_sram(int32_t size, int16_t initialize) {
     sram->capacity = size;
     sram->count = 0;
     sram->head = NULL;
-    sram->tail = NULL;
 
     if (initialize == 1) {
         initialize_sram(sram);
@@ -138,21 +114,14 @@ dram_t * create_dram(int32_t size, int32_t delay) {
         dram->accessible[i] = 0;
     }
     
-
     return dram;
 }
 
 void initialize_sram(sram_t * sram) {
     for (int i = 0; i < sram->capacity; i++) {
         lru_node_t * node = create_lru_node(i, 0);
-        if (sram->head == NULL) {
-            sram->head = node;
-        }
-        if (sram->tail != NULL) {
-            sram->tail->next = node;
-            node->prev = sram->tail;
-        }
-        sram->tail = node;
+        node->next = sram->head;
+        sram->head = node;
     }
     sram->count = sram->capacity;
 }
@@ -164,9 +133,8 @@ void initialize_dm_sram(dm_sram_t * sram) {
 }
 
 int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
-    lru_node_t * tail = sram->tail;
-    if (tail != NULL) {
-        lru_node_t * evicted = pop(&(sram->head), &(sram->tail));
+    if (sram->head != NULL) {
+        lru_node_t * evicted = pop(&(sram->head));
         sram->count--;
         int64_t flow_id = evicted->flow_id;
         int64_t val = evicted->val;
@@ -181,8 +149,8 @@ int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
 }
 
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
-    lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id % DRAM_SIZE]);
-    push(&(sram->head), &(sram->tail), node);
+    lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id]);
+    push(&(sram->head), node);
     sram->count++;
     if (sram->count > sram->capacity) {
         evict_from_sram(sram, dram);
@@ -191,11 +159,11 @@ int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
 }
 
 int64_t access_sram(sram_t * sram, int64_t flow_id) {
-    lru_node_t * node = remove_node(&(sram->head), &(sram->tail), flow_id);
+    lru_node_t * node = remove_node(&(sram->head), flow_id);
     if (node != NULL) {
         // Cache hit
         node->val++;
-        push(&(sram->head), &(sram->tail), node);
+        push(&(sram->head), node);
         return node->val;
     }
     // Cache miss

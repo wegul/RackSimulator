@@ -31,9 +31,11 @@ extern tor_t* tors;
 
 tor_t create_tor(int16_t, int32_t, int16_t);
 void free_tor(tor_t);
+packet_t send_to_spine_baseline(tor_t, int16_t);
 packet_t send_to_spine(tor_t, int16_t, int64_t *, int64_t *);
 packet_t send_to_spine_dm(tor_t, int16_t, int64_t *, int64_t *);
 packet_t send_to_spine_dram_only(tor_t tor, int16_t spine_id, int64_t * cache_misses);
+packet_t send_to_host_baseline(tor_t, int16_t);
 packet_t send_to_host(tor_t, int16_t, int16_t, int64_t *, int64_t *);
 packet_t send_to_host_dram_only(tor_t tor, int16_t host_within_tor, int64_t * cache_misses);
 snapshot_t * snapshot_to_spine(tor_t, int16_t);

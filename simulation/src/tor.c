@@ -187,6 +187,16 @@ packet_t send_to_host_dram_only(tor_t tor, int16_t host_within_tor, int64_t * ca
     return pkt;
 }
 
+packet_t send_to_spine_baseline(tor_t tor, int16_t spine_id) {
+    packet_t pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
+    return pkt;
+}
+
+packet_t send_to_host_baseline(tor_t tor, int16_t host_within_tor) {
+    packet_t pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
+    return pkt;
+}
+
 snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
 {
     //int16_t pkts_recorded = 0;
