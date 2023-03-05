@@ -6,6 +6,7 @@ lru_node_t * create_lru_node(int64_t flow_id, int64_t val) {
     node->flow_id = flow_id;
     node->val = val;
     node->next = NULL;
+    node->fresh = 1;
 
     return node;
 }
@@ -84,6 +85,7 @@ dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
     sram->capacity = size;
     sram->flow_ids = malloc(sizeof(int64_t) * size);
     sram->memory = malloc(sizeof(int64_t) * size);
+    sram->fresh = malloc(sizeof(int) * size);
     for (int i = 0; i < size; i++) {
         if (initialize == 1) {
             sram->flow_ids[i] = i;
@@ -97,6 +99,7 @@ dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
             }
         }
         sram->memory[i] = 0;
+        sram->fresh[i] = 0;
     }
 
     return sram;
@@ -159,11 +162,18 @@ int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
     return node->val;
 }
 
-int64_t access_sram(sram_t * sram, int64_t flow_id) {
+int64_t access_sram(sram_t * sram, int64_t flow_id, int * is_fresh) {
     lru_node_t * node = remove_node(&(sram->head), flow_id);
     if (node != NULL) {
         // Cache hit
         node->val++;
+        if (node->fresh == 1) {
+            *is_fresh = 1;
+        }
+        else {
+            *is_fresh = 0;
+        }
+        node->fresh = 0;
         push(&(sram->head), node);
         return node->val;
     }
@@ -181,12 +191,20 @@ int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
     evict_from_dm_sram(sram, dram, flow_id);
     sram->flow_ids[flow_id % sram->capacity] = flow_id;
     sram->memory[flow_id % sram->capacity] = dram->memory[flow_id];
+    sram->fresh[flow_id % sram->capacity] = 1;
     return sram->memory[flow_id % sram->capacity];
 }
 
-int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id) {
+int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id, int * is_fresh) {
     if (sram->flow_ids[flow_id % sram->capacity] == flow_id) {
-        // Cache hit
+        // Cache hit 
+        if (sram->fresh[flow_id % sram->capacity] == 1) {
+            sram->fresh[flow_id % sram->capacity] = 0;
+            *is_fresh = 1;
+        }
+        else {
+            *is_fresh = 0;
+        }
         sram->memory[flow_id % sram->capacity]++;
         return sram->memory[(flow_id % sram->capacity)]; // SUCCESS!!!
     }

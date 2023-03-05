@@ -14,6 +14,11 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     self->pkt_id = pkt_id;
     self->control_flag = 0;
     self->ecn_flag = 0;
+
+    self->time_arrived_at_spine = 0;
+    self->time_left_spine = 0;
+    self->time_spent_at_spine = 0;
+    //self->snapshotted = 0;
     return self;
 }
 

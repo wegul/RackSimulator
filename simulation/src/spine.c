@@ -45,13 +45,15 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
 
     pkt = (packet_t) buffer_peek(spine->pkt_buffer[tor_num], 0);
     if (pkt != NULL) {
-        int64_t val = access_sram(spine->sram, pkt->flow_id);
+        int is_fresh = 0;
+        int64_t val = access_sram(spine->sram, pkt->flow_id, &is_fresh);
         // Cache miss
         if (val < 0) {
             // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
-            (*cache_misses)++;
+            
             spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
             if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
+                (*cache_misses)++;
                 spine->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
             }
@@ -60,7 +62,10 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
         // Cache hit
         else {
             // printf("Spine %d Cache Hit Flow %d: %d\n", spine->spine_index, (int) pkt->flow_id, (int) val);
-            (*cache_hits)++;
+            if (is_fresh == 0) {
+                (*cache_hits)++;
+            }
+            
             if (spine->snapshot_idx[tor_num] > 0) {
                 spine->snapshot_idx[tor_num]--;
             }
@@ -78,13 +83,14 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num, int64_t * cache_misses, 
 
     pkt = (packet_t) buffer_peek(spine->pkt_buffer[tor_num], 0);
     if (pkt != NULL) {
-        int64_t val = access_dm_sram(spine->dm_sram, pkt->flow_id);
+        int is_fresh = 0;
+        int64_t val = access_dm_sram(spine->dm_sram, pkt->flow_id, &is_fresh);
         // Cache miss
         if (val < 0) {
             //printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
-            (*cache_misses)++;
             spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
             if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
+                (*cache_misses)++;
                 spine->dram->accessible[pkt->flow_id] = 0;
                 dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
             }
@@ -94,7 +100,10 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num, int64_t * cache_misses, 
         // Cache hit
         else {
             //printf("Spine %d Cache Hit Flow %d: %d\n", spine->spine_index, (int) pkt->flow_id, (int) val);
-            (*cache_hits)++;
+            if (is_fresh == 0) {
+                (*cache_hits)++;
+            }
+            
             if (spine->snapshot_idx[tor_num] > 0) {
                 spine->snapshot_idx[tor_num]--;
             }
@@ -112,15 +121,16 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
     pkt = (packet_t) buffer_peek(spine->pkt_buffer[tor_num], 0);
     if (pkt != NULL) {
         if (spine->dram->accessible[pkt->flow_id] == spine->dram->delay) {
-            for (int i = 0; i < DRAM_SIZE; i++) {
-                spine->dram->accessible[i] = 0;
-            }
+            //for (int i = 0; i < DRAM_SIZE; i++) {
+            //    spine->dram->accessible[i] = 0;
+            //}
+            (*cache_misses)++;
             spine->dram->accessible[pkt->flow_id] = 0;
             pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
             return pkt;
         }
         else {
-            (*cache_misses)++;
+            
             spine->dram->accessible[pkt->flow_id]++;
             return NULL;
         }
@@ -131,10 +141,10 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
 
 snapshot_t * snapshot_to_tor(spine_t spine, int16_t tor_num)
 {
-    //int16_t pkts_recorded = 0;
-    snapshot_t * snapshot = NULL;
-    // snapshot_t * snapshot = create_snapshot(spine->pkt_buffer[tor_num], spine->snapshot_idx[tor_num], &pkts_recorded);
-    // spine->snapshot_idx[tor_num] += pkts_recorded;
+    int16_t pkts_recorded = 0;
+    //snapshot_t * snapshot = NULL;
+    snapshot_t * snapshot = create_snapshot(spine->pkt_buffer[tor_num], spine->snapshot_idx[tor_num], &pkts_recorded);
+    spine->snapshot_idx[tor_num] += pkts_recorded;
     return snapshot;
 }
 
@@ -147,3 +157,4 @@ int64_t spine_buffer_bytes(spine_t spine, int port)
     }
     return bytes;
 }
+

@@ -22,12 +22,14 @@ int init_sram = 0; // Value of 1 = initialize SRAM
 int program_tors = 0; // Value of 1 = ToRs are programmable
 int fully_associative = 0; // Value of 1 = use fully-associative SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
-int burst_size = 3; // Number of packets to send in a burst
+int burst_size = 1; // Number of packets to send in a burst
 double load = 1.0; // Network load 
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
+float avg_delay_at_spine = 0;
+int64_t pkt_delays_recorded = 0;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
@@ -108,6 +110,11 @@ void work_per_timeslot()
                         pkt = send_to_tor_dm(spine, k, &cache_misses, &cache_hits);
                     }
                     if (pkt != NULL) {
+                        pkt->time_left_spine = curr_timeslot;
+                        pkt->time_spent_at_spine = pkt->time_left_spine - pkt->time_arrived_at_spine;
+                        //printf("delay: %0.3f\nrecorded: %d\n", avg_delay_at_spine, pkt_delays_recorded);
+                        avg_delay_at_spine = (avg_delay_at_spine * pkt_delays_recorded + pkt->time_spent_at_spine) / (pkt_delays_recorded + 1);
+                        pkt_delays_recorded++;
                         pkt->time_to_dequeue_from_link = curr_timeslot +
                             per_hop_propagation_delay_in_timeslots;
                         link_enqueue(links->spine_to_tor_link[spine_index][k], pkt);
@@ -123,16 +130,17 @@ void work_per_timeslot()
                 }
 
                 //send snapshots every snapshot_epoch
-                if (curr_timeslot % snapshot_epoch == 0) {
-                    snapshot_t * snapshot = snapshot_to_tor(spine, k);
-                    if (snapshot != NULL) {
-                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                        ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
-#ifdef DEBUG_SNAPSHOTS
-                        printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
-#endif
-                    }
-                }
+                // Only spine has SRAM, so no need for spine to send snapshot to ToR
+//                 if (curr_timeslot % snapshot_epoch == 0) {
+//                     snapshot_t * snapshot = snapshot_to_tor(spine, k);
+//                     if (snapshot != NULL) {
+//                         snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+//                         ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
+// #ifdef DEBUG_SNAPSHOTS
+//                         printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
+// #endif
+//                     }
+//                 }
             }
         }
 
@@ -310,18 +318,22 @@ void work_per_timeslot()
                         break;
                     }
                 }
+#ifdef ENABLE_SNAPSHOTS
                 //send snapshots every snapshot_epoch
                 if (curr_timeslot % snapshot_epoch == 0) {
                     snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
                     if (snapshot != NULL) {
                         snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                        ipg_send(links->spine_to_tor_link[tor_index][tor_port], snapshot);
+                        ipg_send(links->tor_to_spine_link[tor_index][tor_port], snapshot);
 #ifdef DEBUG_SNAPSHOTS
                     printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
+
                     }
                 }
+#endif
             }
+
 
             //send to each host
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
@@ -426,14 +438,15 @@ void work_per_timeslot()
                     peek_pkt = (packet_t) link_peek(links->spine_to_tor_link[src_spine][tor_index]);
                 }
                 // Receive snapshot
-                snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->spine_to_tor_link[src_spine][tor_index]);
-                if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
-                    snapshot = ipg_recv(links->spine_to_tor_link[src_spine][tor_index]);
-                    free(snapshot);
-#ifdef DEBUG_SNAPSHOTS
-                    printf("%d: ToR %d recv snapshot from spine %d\n", (int) curr_timeslot, i, tor_port);
-#endif
-                }
+                // Again, ToR has no SRAM, so no need to receive snapshot
+//                 snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->spine_to_tor_link[src_spine][tor_index]);
+//                 if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
+//                     snapshot = ipg_recv(links->spine_to_tor_link[src_spine][tor_index]);
+//                     free(snapshot);
+// #ifdef DEBUG_SNAPSHOTS
+//                     printf("%d: ToR %d recv snapshot from spine %d\n", (int) curr_timeslot, i, tor_port);
+// #endif
+//                 }
             }
         }
 
@@ -465,6 +478,7 @@ void work_per_timeslot()
                     int16_t dst_tor = dst_host / NODES_PER_RACK;
                     if (dst_host != -1) {
                         pkt->time_when_added_to_spine_queue = curr_timeslot;
+                        pkt->time_arrived_at_spine = curr_timeslot;
                         assert(buffer_put(spine->pkt_buffer[dst_tor], pkt) != -1);
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
                         if (spine->pkt_buffer[dst_tor]->num_elements > ECN_CUTOFF_SPINE) {
@@ -481,15 +495,39 @@ void work_per_timeslot()
                     bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->tor_to_spine_link[src_tor][spine_index]);
                 }
+#ifdef ENABLE_SNAPSHOTS
                 // Receive snapshot
                 snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->tor_to_spine_link[src_tor][spine_index]);
-                if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
-                    snapshot = ipg_recv(links->spine_to_tor_link[src_tor][spine_index]);
+                if (snapshot != NULL && snapshot->time_to_dequeue_from_link <= curr_timeslot) {
+                    snapshot = ipg_recv(links->tor_to_spine_link[src_tor][spine_index]);
+                    // process snapshot 
+                    for (int cnt = 0; cnt < SNAPSHOT_SIZE; cnt++) {
+                        int64_t snapshot_flow = (int64_t) snapshot->flow_id[cnt];
+                        if (enable_sram != 0 && snapshot_flow >= 0) {
+                            if (fully_associative) {
+                                int is_fresh = 0;
+                                if (access_sram(spine->sram, snapshot_flow, &is_fresh) < 0) {
+                                    pull_from_dram(spine->sram, spine->dram, snapshot_flow);
+                                    //printf("pulling from snapshot\n");
+                                }
+                            }
+                            else {
+                                int is_fresh = 0;
+                                if (access_dm_sram(spine->dm_sram, snapshot_flow, &is_fresh) < 0) {
+                                    dm_pull_from_dram(spine->dm_sram, spine->dram, snapshot_flow);
+                                    //printf("pulling from snapshot\n");
+                                }
+                            }
+                        }
+                    }
                     free(snapshot);
 #ifdef DEBUG_SNAPSHOTS
                     printf("%d: Spine %d recv snapshot from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
 #endif
+
                 }
+#endif
+
             }
         }
 
@@ -719,7 +757,7 @@ void process_args(int argc, char ** argv) {
                 printf("Enabling programmable ToRs\n");
                 break;
             case 'k':
-                int dram_access_time = atof(optarg);
+                dram_access_time = atof(optarg);
                 printf("DRAM access speed is %d ns\n", dram_access_time);
                 break;
             case 'f': 
@@ -776,6 +814,7 @@ void process_args(int argc, char ** argv) {
         spines[i]->sram->capacity = sram_size;
         spines[i]->dm_sram->capacity = sram_size;
         spines[i]->dram->delay = timeslots_per_dram_access;
+        spines[i]->dram->accesses = accesses_per_timeslot;
     }
     for (int i = 0; i < NUM_OF_RACKS; i++) {
         tors[i]->sram->capacity = sram_size;
@@ -938,7 +977,7 @@ int main(int argc, char** argv) {
     process_args(argc, argv);
     
     work_per_timeslot();
-    print_system_stats(spines, tors, total_bytes_rcvd, total_pkts_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits);
+    print_system_stats(spines, tors, total_bytes_rcvd, total_pkts_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits, avg_delay_at_spine, timeslot_len);
 #ifdef WRITE_QUEUELENS
     write_to_timeseries_outfile(timeseries_fp, spines, tors, curr_timeslot, num_datapoints);
 #endif

@@ -1,10 +1,11 @@
 #include "system_stats.h"
 
-void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int64_t total_pkts, int64_t ns, int64_t cache_misses, int64_t cache_hits) {
+void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int64_t total_pkts, int64_t ns, int64_t cache_misses, int64_t cache_hits, float avg_delay_at_spine, float timeslot_len) {
+    //print_spine_stats(spines);
+    //print_tor_stats(tors);
     print_network_tput(total_bytes, total_pkts, ns);
     print_cache_stats(cache_misses, cache_hits);
-    print_spine_stats(spines);
-    print_tor_stats(tors);
+    print_delay_stats(avg_delay_at_spine, timeslot_len);
 }
 
 void print_network_tput(int64_t total_bytes, int64_t total_pkts, int64_t ns) {
@@ -56,6 +57,10 @@ void print_tor_stats(tor_t * tors) {
         }
         printf("]\n\n");
     }
+}
+
+void print_delay_stats(float avg_delay_at_spine, float timeslot_len) {
+    printf("Avg delay at spine: %0.3f timeslots %0.3f ns\n", avg_delay_at_spine, (avg_delay_at_spine * timeslot_len));
 }
 
 FILE * open_outfile(char * filename) {

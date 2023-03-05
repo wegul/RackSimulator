@@ -57,7 +57,8 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id, int64_t * cache_misses, int6
 
     pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);
     if (pkt != NULL) {
-        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        int is_fresh = 0;
+        int64_t val = access_sram(tor->sram, pkt->flow_id, &is_fresh);
         // Cache miss
         if (val < 0) {
             (*cache_misses)++;
@@ -85,7 +86,8 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id, int64_t * cache_misses, i
 
     pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);
     if (pkt != NULL) {
-        int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id);
+        int is_fresh = 0;
+        int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id, &is_fresh);
         // Cache miss
         if (val < 0) {
             (*cache_misses)++;
@@ -138,10 +140,12 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
     if (pkt != NULL) {
         int64_t val = -1;
         if (fa_sram > 0) {
-            val = access_sram(tor->sram, pkt->flow_id);
+            int is_fresh = 0;
+            val = access_sram(tor->sram, pkt->flow_id, &is_fresh);
         }
         else {
-            val = access_dm_sram(tor->dm_sram, pkt->flow_id);
+            int is_fresh = 0;
+            val = access_dm_sram(tor->dm_sram, pkt->flow_id, &is_fresh);
         }
         // Cache miss
         if (val < 0) {
@@ -199,10 +203,11 @@ packet_t send_to_host_baseline(tor_t tor, int16_t host_within_tor) {
 
 snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
 {
-    //int16_t pkts_recorded = 0;
-    snapshot_t * snapshot = NULL;
-    // snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], tor->snapshot_idx[spine_id], &pkts_recorded);
-    // tor->snapshot_idx[spine_id] += pkts_recorded;
+    int16_t pkts_recorded = 0;
+    //snapshot_t * snapshot = NULL;
+    //snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], tor->snapshot_idx[spine_id], &pkts_recorded);
+    //tor->snapshot_idx[spine_id] += pkts_recorded;
+    snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], 0, &pkts_recorded);
     return snapshot;
 }
 

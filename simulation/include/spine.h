@@ -32,6 +32,8 @@ void free_spine(spine_t);
 packet_t send_to_tor(spine_t, int16_t, int64_t *, int64_t *, int);
 packet_t send_to_tor_dm(spine_t, int16_t, int64_t *, int64_t *);
 packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_misses);
+void clean_sram(spine_t);
+void clean_dm_sram(spine_t);
 snapshot_t * snapshot_to_tor(spine_t, int16_t);
 int64_t spine_buffer_bytes(spine_t, int);
 

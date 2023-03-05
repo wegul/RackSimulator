@@ -55,13 +55,13 @@
 #define ECN_CUTOFF_TOR_DOWN 70
 #define ECN_CUTOFF_SPINE 56
 #define ECN_WIDTH 8
-#define MTU 1024
+#define MTU 256
 #define SSTHRESH_START 8
 #define INTERPACKET_GAP 96
 #define SNAPSHOT_SIZE 4
 #define SRAM_SIZE MAX_FLOW_ID
 #define DRAM_SIZE MAX_FLOW_ID
-#define DRAM_DELAY 60
+#define DRAM_DELAY 100
 
 extern int16_t*** source_list;
 extern int16_t epoch_len;
