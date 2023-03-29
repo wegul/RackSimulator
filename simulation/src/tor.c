@@ -61,15 +61,21 @@ packet_t send_to_spine(tor_t tor, int16_t spine_id, int64_t * cache_misses, int6
         int64_t val = access_sram(tor->sram, pkt->flow_id, &is_fresh);
         // Cache miss
         if (val < 0) {
-            (*cache_misses)++;
-            //printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
-            pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
+            if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
+                (*cache_misses)++;
+                tor->dram->accessible[pkt->flow_id] = 0;
+                pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            }
             return NULL;
         }
         // Cache hit
         else {
-            (*cache_hits)++;
             //printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
+            if (is_fresh == 0) {
+                (*cache_hits)++;
+            }
+            
             if (tor->snapshot_idx[spine_id] > 0) {
                 tor->snapshot_idx[spine_id]--;
             }
@@ -139,30 +145,37 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
     pkt = (packet_t) buffer_peek(tor->downstream_pkt_buffer[host_within_tor], 0);
     if (pkt != NULL) {
         int64_t val = -1;
+        int is_fresh = 0;
         if (fa_sram > 0) {
-            int is_fresh = 0;
             val = access_sram(tor->sram, pkt->flow_id, &is_fresh);
         }
         else {
-            int is_fresh = 0;
             val = access_dm_sram(tor->dm_sram, pkt->flow_id, &is_fresh);
         }
         // Cache miss
         if (val < 0) {
-            (*cache_misses)++;
             //printf("Tor %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
-            if (fa_sram > 0) {
-                pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
-            }
-            else {
-                dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
+
+            tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
+            if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
+                (*cache_misses)++;
+                tor->dram->accessible[pkt->flow_id] = 0;
+                if (fa_sram > 0) {
+                    pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+                }
+                else {
+                    dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
+                }
             }
             return NULL;
         }
         // Cache hit
         else {
-            (*cache_hits)++;
             //printf("Tor %d Cache Hit Flow %d: %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
+            if (is_fresh == 0) {
+                (*cache_hits)++;
+            }
+
             pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
         }
     }
@@ -204,10 +217,7 @@ packet_t send_to_host_baseline(tor_t tor, int16_t host_within_tor) {
 snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
 {
     int16_t pkts_recorded = 0;
-    //snapshot_t * snapshot = NULL;
-    //snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], tor->snapshot_idx[spine_id], &pkts_recorded);
-    //tor->snapshot_idx[spine_id] += pkts_recorded;
-    snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], 0, &pkts_recorded);
+    snapshot_t * snapshot = create_snapshot(tor->upstream_pkt_buffer[spine_id], &pkts_recorded);
     return snapshot;
 }
 

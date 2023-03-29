@@ -5,7 +5,9 @@ static int pkt_size = MTU; //in bytes
 static float link_bandwidth = 100; //in Gbps
 static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
+#ifdef ENABLE_SNAPSHOTS
 static int snapshot_epoch = 1; //timeslots between snapshots
+#endif
 
 int16_t header_overhead = 64;
 float per_hop_propagation_delay_in_ns = 100;
@@ -18,17 +20,27 @@ int packet_counter = 0;
 int num_datapoints = 100000;
 
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
-int init_sram = 0; // Value of 1 = initialize SRAM
-int program_tors = 0; // Value of 1 = ToRs are programmable
-int fully_associative = 0; // Value of 1 = use fully-associative SRAM
+int init_sram = 0; // Value of 1 = initialize SRAMs
+int program_tors = 1; // Value of 1 = ToRs are programmable
+int fully_associative = 1; // Value of 1 = use fully-associative SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 1; // Number of packets to send in a burst
+int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst mode
+int incast_active = 0; // Number of flows actively sending incast packets. Remaining nodes are reserved for switching
+int incast_switch = 1; // Number of flows that switch flows for each incast period
+int incast_size = 1; // Number of timeslots to send incast packets
+int incast_pause = 1; // Number of timeslots to wait for buffers to drain
+int incast_period; // Period of an incast burst
 double load = 1.0; // Network load 
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
+int64_t spine_cache_misses = 0;
+int64_t spine_cache_hits = 0;
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
 float avg_delay_at_spine = 0;
+float avg_max_delay_at_spine = 0;
+int max_delay_in_timeperiod = 0;
 int64_t pkt_delays_recorded = 0;
 
 static volatile int8_t terminate0 = 0;
@@ -62,6 +74,17 @@ void work_per_timeslot()
 {
     printf("Simulation started\n");
     int flow_idx = 0;
+    int incast_buffer_len = 0;
+    int incast_sent_on_period = 0;
+    int new_period = 1;
+    int incast_active_senders[incast_active];
+    int incast_inactive_senders[NUM_OF_NODES - incast_active - 1];
+    for (int i = 0; i < incast_active; i++) { 
+        incast_active_senders[i] = i;
+    }
+    for (int i = 0; i < NUM_OF_NODES - incast_active - 1; i++) {
+        incast_inactive_senders[i] = i + incast_active;
+    }
     while (1) {
 /*---------------------------------------------------------------------------*/
                                   //Activate inactive flows
@@ -99,24 +122,43 @@ void work_per_timeslot()
                 int bytes_sent = 0;
                 packet_t peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot){
+                    int pulled_on_this_timeslot = 0;
                     packet_t pkt = NULL;
-                    if (enable_sram == 0) {
-                        pkt = send_to_tor_dram_only(spine, k, &cache_misses);
-                    }
-                    else if (fully_associative > 0) {
-                        pkt = send_to_tor(spine, k, &cache_misses, &cache_hits, curr_timeslot);
+                    if (peek_pkt->control_flag == 0) {
+                        if (enable_sram == 0) {
+                            pkt = send_to_tor_dram_only(spine, k, &cache_misses);
+                        }
+                        else if (fully_associative > 0) {
+                            pkt = send_to_tor(spine, k, &spine_cache_misses, &spine_cache_hits);
+                        }
+                        else {
+                            int cache_misses_before = cache_misses;
+                            pkt = send_to_tor_dm(spine, k, &cache_misses, &cache_hits);
+                            if (cache_misses_before != cache_misses) {
+                                pulled_on_this_timeslot = 1;
+                            }
+                        }
                     }
                     else {
-                        pkt = send_to_tor_dm(spine, k, &cache_misses, &cache_hits);
+                        pkt = (packet_t) buffer_get(spine->pkt_buffer[k]);
                     }
                     if (pkt != NULL) {
                         pkt->time_left_spine = curr_timeslot;
                         pkt->time_spent_at_spine = pkt->time_left_spine - pkt->time_arrived_at_spine;
-                        //printf("delay: %0.3f\nrecorded: %d\n", avg_delay_at_spine, pkt_delays_recorded);
+                        if (pulled_on_this_timeslot > 0) {
+                            pkt->time_spent_at_spine += timeslots_per_dram_access;
+                        }
+                        //printf("delay: %0.3f\nrecorded: %d\n", avg_max_delay_at_spine, pkt_delays_recorded);
                         avg_delay_at_spine = (avg_delay_at_spine * pkt_delays_recorded + pkt->time_spent_at_spine) / (pkt_delays_recorded + 1);
                         pkt_delays_recorded++;
+                        if (pkt->time_spent_at_spine > max_delay_in_timeperiod) {
+                            max_delay_in_timeperiod = pkt->time_spent_at_spine;
+                        }
                         pkt->time_to_dequeue_from_link = curr_timeslot +
                             per_hop_propagation_delay_in_timeslots;
+                        if (pulled_on_this_timeslot > 0) {
+                            pkt->time_to_dequeue_from_link += timeslots_per_dram_access;
+                        }
                         link_enqueue(links->spine_to_tor_link[spine_index][k], pkt);
 #ifdef DEBUG_DRIVER
                         printf("%d: spine %d sent pkt to ToR %d\n", (int) curr_timeslot, i, k);
@@ -130,83 +172,262 @@ void work_per_timeslot()
                 }
 
                 //send snapshots every snapshot_epoch
-                // Only spine has SRAM, so no need for spine to send snapshot to ToR
-//                 if (curr_timeslot % snapshot_epoch == 0) {
-//                     snapshot_t * snapshot = snapshot_to_tor(spine, k);
-//                     if (snapshot != NULL) {
-//                         snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-//                         ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
-// #ifdef DEBUG_SNAPSHOTS
-//                         printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
-// #endif
-//                     }
-//                 }
+#ifdef ENABLE_SNAPSHOTS
+                if (curr_timeslot % snapshot_epoch == 0) {
+                    snapshot_t * snapshot = snapshot_to_tor(spine, k);
+                    if (snapshot != NULL) {
+                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                        ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                        printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
+#endif
+                    }
+                }
+#endif
             }
         }
 
 /*---------------------------------------------------------------------------*/
                                   //HOST -- SEND
 /*---------------------------------------------------------------------------*/
+        
+        int16_t nodes_to_switch[incast_switch];
+        if (packet_mode == 2) {
+            for (int i = 0; i < incast_switch; i++) {
+                nodes_to_switch[i] = rand() % NUM_OF_NODES;
+            }
+        }
+
+        if (packet_mode == 1 && incast_sent_on_period <= incast_size) {
+            incast_sent_on_period++;
+        }
+
+        //if (packet_mode == 1 && curr_timeslot % incast_period == 0) {
+        if (packet_mode == 1 && new_period == 1) {
+            shuffle(incast_active_senders, incast_active);
+            shuffle(incast_inactive_senders, NUM_OF_NODES - incast_active - 1);
+            
+            for (int i = 0; i < incast_switch; i++) {
+                int temp = incast_active_senders[i];
+                incast_active_senders[i] = incast_inactive_senders[i];
+                incast_inactive_senders[i] = temp;
+#ifdef DEBUG_DRIVER
+                printf("%d: Activating flow %d, Deactivating node %d\n", (int) curr_timeslot, incast_active_senders[i], incast_inactive_senders[i]);
+#endif
+            }
+        }
 
         for (int i = 0; i < NUM_OF_NODES; ++i) {
             node_t node = nodes[i];
             int16_t node_index = node->node_index;
-            // Check if host has any active flows at current moment
-            if ((node->active_flows)->num_elements > 0 || node->current_flow != NULL) {
-                flow_t * flow = NULL;
-                // Time to select a new burst flow
-                if (curr_timeslot % burst_size == 0 || node->current_flow == NULL) {
-                    // Return the current flow back to the active flows list
-                    if (node->current_flow != NULL) {
+            // Full Network Bandwidth mode
+            if (packet_mode == 0) {
+                // Check if host has any active flows at current moment
+                if ((node->active_flows)->num_elements > 0 || node->current_flow != NULL) {
+                    flow_t * flow = NULL;
+                    // Time to select a new burst flow
+                    if (curr_timeslot % burst_size == 0 || node->current_flow == NULL) {
+                        // Return the current flow back to the active flows list
+                        if (node->current_flow != NULL) {
 #ifdef DEBUG_DRIVER
-                        printf("%d: Returning flow %d after finishing burst\n", (int) curr_timeslot, (int) node->current_flow->flow_id);
+                            printf("%d: Returning flow %d after finishing burst\n", (int) curr_timeslot, (int) node->current_flow->flow_id);
+#endif
+                            buffer_put(node->active_flows, node->current_flow);
+                            node->current_flow = NULL;
+                        }
+                        // Randomly select a new active flow to start
+                        int32_t num_af = node->active_flows->num_elements;
+                        int32_t selected = (int32_t) rand() % num_af;
+                        flow = buffer_remove(node->active_flows, selected);
+                        // If flow is not active yet, return it to flow list
+                        if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
+                            buffer_put(node->active_flows, flow);
+                            flow = NULL;
+#ifdef DEBUG_DRIVER
+                            printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
+#endif
+                        }
+
+                        else {
+                            node->current_flow = flow;
+#ifdef DEBUG_DRIVER
+                            printf("%d: Node %d has started new burst on flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
+#endif
+                        }
+                    }
+                    // Burst size has not been reached; keep sending from current flow
+                    else {
+#ifdef DEBUG_DRIVER
+                        printf("%d: Node %d contiuing to send burst from flow %d\n", (int) curr_timeslot, (int) node_index, (int) node->current_flow->flow_id);
+#endif
+                        flow = node->current_flow;
+                    }
+
+                    // Send packet if random generates number below load ratio
+                    if ((double) rand() / (double) RAND_MAX < load) {        
+                        if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
+                            int16_t src_node = flow->src;
+                            int16_t dst_node = flow->dst;
+                            int64_t flow_id = flow->flow_id;
+
+                            // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
+                            node->cwnd[dst_node] = incast_size * 100;
+                            int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
+                            int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
+                            if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
+                                // Determine how large the packet will be
+                                int64_t size = MTU;
+                                if (cwnd_bytes_remaining < MTU) {
+                                    size = cwnd_bytes_remaining;
+                                }
+                                if (flow_bytes_remaining < size) {
+                                    size = flow_bytes_remaining;
+                                }
+                                assert(size > 0);
+
+                                // Create packet
+                                packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
+                                packet_counter++;
+                                node->seq_num[dst_node] += size;
+
+                                // Send packet
+                                pkt->time_when_transmitted_from_src = curr_timeslot;
+                                int16_t dst_tor = node_index / NODES_PER_RACK;
+                                pkt->time_to_dequeue_from_link = curr_timeslot +
+                                    per_hop_propagation_delay_in_timeslots;
+                                link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+#ifdef DEBUG_DRIVER
+                                printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
+                                print_packet(pkt);
+#endif
+
+                                // Update flow state
+                                if (flow->active == 0) {
+                                    flowlist->active_flows++;
+                                    flow->start_timeslot = curr_timeslot;
+                                    total_flows_started++;
+#ifdef DEBUG_DRIVER 
+                                    printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
+#endif
+                                }
+
+                                flow->active = 1;
+                                flow->pkts_sent++;
+                                flow->bytes_sent += size;
+                                flow->timeslots_active++;
+                                // Determine if last packet of flow has been sent
+                                if (flow->pkts_sent >= flow->flow_size) {
+                                    flow->active = 0;
+                                    flowlist->active_flows--;
+#ifdef DEBUG_DRIVER
+                                    printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
+#endif
+                                }
+                            }
+
+                            // Set current flow back to null if there are no more bytes left to send from this flow
+                            if (flow_bytes_remaining < 1) {
+                                node->current_flow = NULL;
+                            }
+                            
+                            // Return flow back to active flows if it is not complete
+                            //if (flow_bytes_remaining > 0) {
+                            //    buffer_put(node->active_flows, flow);
+                            //    node->current_flow = NULL;
+                            //}
+                        }
+                    }
+                }
+            }
+            // Incast Packets mode
+            else if (packet_mode == 1 && i != NUM_OF_NODES - 1) {
+                flow_t * flow = NULL;
+                // Assign new flows
+                //if (curr_timeslot % incast_period == 0) {
+                if (new_period == 1) {
+                    // Determine if flow was active last timeslot
+                    int was_active = 0;
+                    if (node->current_flow != NULL) {
+                        was_active = 1;
+                    }
+                    // Determine if flow will be activated this timeslot
+                    int is_active = 1;
+                    for (int j = 0; j < NUM_OF_NODES - incast_active - 1; j++) {
+                        if (incast_inactive_senders[j] == i) {
+                            is_active = 0;
+                            break;
+                        }
+                    }
+
+                    // If node will begin sending on this timeslot, activate flow
+                    if (was_active == 0 && is_active == 1) {
+#ifdef DEBUG_DRIVER
+                        printf("%d: Node %d has begun sending\n", (int) curr_timeslot, i);
+#endif
+                        flow = buffer_remove(node->active_flows, 0);
+                        // Return flow if not yet active
+                        if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
+                            buffer_put(node->active_flows, flow);
+                            flow = NULL;
+#ifdef DEBUG_DRIVER
+                            printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
+#endif            
+                        }
+                        node->current_flow = flow;
+                    }
+
+                    // If node will cease sending on this timeslot, activate flow
+                    if (was_active == 1 && is_active == 0) {
+#ifdef DEBUG_DRIVER
+                        printf("%d: Node %d has stopped sending\n", (int) curr_timeslot, i);
 #endif
                         buffer_put(node->active_flows, node->current_flow);
                         node->current_flow = NULL;
-                    }
-                    // Randomly select a new active flow to start
-                    int32_t num_af = node->active_flows->num_elements;
-                    int32_t selected = (int32_t) rand() % num_af;
-                    flow = buffer_remove(node->active_flows, selected);
-                    // If flow is not active yet, return it to flow list
-                    if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
-                        buffer_put(node->active_flows, flow);
                         flow = NULL;
-#ifdef DEBUG_DRIVER
-                        printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
-#endif
                     }
 
-                    else {
-                        node->current_flow = flow;
-#ifdef DEBUG_DRIVER
-                        printf("%d: Node %d has started new burst on flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
-#endif
+                    // Ensure initial flows exist in memory already so as not to flood cache misses start of simulation
+                    if (node->current_flow != NULL && curr_timeslot == 0) {
+                        for (int k = 0; k < NUM_OF_SPINES; k++) {
+                            spine_t spine = spines[k];
+                            if (fully_associative) {
+                                pull_from_dram(spine->sram, spine->dram, flow->flow_id);
+                            }
+                            else {
+                                dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
+                            }
+                        }
+                        for (int k = 0; k < NUM_OF_RACKS; k++) {
+                            tor_t tor = tors[k];
+                            if (fully_associative) {
+                                pull_from_dram(tor->sram, tor->dram, flow->flow_id);
+                            }
+                            else {
+                                dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
+                            }
+                        }
                     }
                 }
-                // Burst size has not been reached; keep sending from current flow
-                else {
-#ifdef DEBUG_DRIVER
-                    printf("%d: Node %d contiuing to send burst from flow %d\n", (int) curr_timeslot, (int) node_index, (int) node->current_flow->flow_id);
-#endif
-                    flow = node->current_flow;
-                }
-                // Send packet if random generates number below load ratio
-                if ((double) rand() / (double) RAND_MAX < load) {        
+                flow = node->current_flow;
+                // Sending Period
+                //if ((curr_timeslot % incast_period) < incast_size) {
+                if (incast_sent_on_period <= incast_size) {
+                    // Send packets from currently selected flows
                     if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
-                        int16_t src_node = flow->src;
-                        int16_t dst_node = flow->dst;
+                        int src_node = flow->src;
+                        int dst_node = flow->dst;
                         int64_t flow_id = flow->flow_id;
 
-                        // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
+                        // Send packets from flow until cwnd is reached or the flow runs out of bytes to send
                         int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
-                        int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
-                        if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
-                            // Determine how large the packet will be
+                        //int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
+                        //if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
+                        if (flow_bytes_remaining > 0) {
+                            // Determine packet sizee
                             int64_t size = MTU;
-                            if (cwnd_bytes_remaining < MTU) {
-                                size = cwnd_bytes_remaining;
-                            }
+                            //if (cwnd_bytes_remaining < MTU) {
+                            //    size = cwnd_bytes_remaining;
+                            //}
                             if (flow_bytes_remaining < size) {
                                 size = flow_bytes_remaining;
                             }
@@ -216,28 +437,22 @@ void work_per_timeslot()
                             packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
                             packet_counter++;
                             node->seq_num[dst_node] += size;
-
+                            
                             // Send packet
                             pkt->time_when_transmitted_from_src = curr_timeslot;
-                            int16_t dst_tor = node_index / NODES_PER_RACK;
-                            pkt->time_to_dequeue_from_link = curr_timeslot +
-                                per_hop_propagation_delay_in_timeslots;
+                            int dst_tor = node_index / NODES_PER_RACK;
+                            pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                             link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-    #ifdef DEBUG_DRIVER
+#ifdef DEBUG_DRIVER
                             printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
-                            print_packet(pkt);
-    #endif
+#endif
 
                             // Update flow state
                             if (flow->active == 0) {
                                 flowlist->active_flows++;
                                 flow->start_timeslot = curr_timeslot;
                                 total_flows_started++;
-    #ifdef DEBUG_DRIVER 
-                                printf("%d: flow %d started\n", (int) curr_timeslot, (int) flow_id);
-    #endif
                             }
-
                             flow->active = 1;
                             flow->pkts_sent++;
                             flow->bytes_sent += size;
@@ -246,26 +461,127 @@ void work_per_timeslot()
                             if (flow->pkts_sent >= flow->flow_size) {
                                 flow->active = 0;
                                 flowlist->active_flows--;
-    #ifdef DEBUG_DRIVER
-                                printf("%d: flow %d sending final packet\n", (int) curr_timeslot, (int) flow_id);
-    #endif
                             }
                         }
-
-                        // Set current flow back to null if there are no more bytes left to send from this flow
-                        if (flow_bytes_remaining < 1) {
-                            node->current_flow = NULL;
-                        }
-                        
-                        // Return flow back to active flows if it is not complete
-                        //if (flow_bytes_remaining > 0) {
-                        //    buffer_put(node->active_flows, flow);
-                        //    node->current_flow = NULL;
-                        //}
                     }
                 }
+                // Recovery Period: send nothing
+                //else {
+                //}    
+            }
+            // Burst Packets mode
+            else if (packet_mode == 2) {
+                flow_t * flow = NULL;
+                // Assign new flows
+                if (curr_timeslot % incast_period == 0) {
+                    // If node is selected to change flows, switch to new flow
+                    for (int j = 0; j < incast_switch; j++) {
+                        if ((curr_timeslot == 0 && j == 0) || node_index == nodes_to_switch[j]) {
+                            if (node->current_flow != NULL) {
+#ifdef DEBUG_DRIVER
+                                printf("%d: Node %d returned flow %d\n", (int) curr_timeslot, (int) node_index, (int) node->current_flow->flow_id);
+#endif
+                                buffer_put(node->active_flows, node->current_flow);
+                                node->current_flow = NULL;
+                            }
+                            // Randomly select new flow to start
+                            int32_t num_af = node->active_flows->num_elements;
+                            int32_t selected = (int32_t) rand() % num_af;
+                            flow = buffer_remove(node->active_flows, selected);
+                            // If flow is not yet active, return it to the flow list
+                            if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
+                                buffer_put(node->active_flows, flow);
+                                flow = NULL;
+#ifdef DEBUG_DRIVER
+                                printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
+#endif                        
+                            }
+                            else {
+                                node->current_flow = flow;
+                                // Ensure initial flows exist in memory already so as to not flood start of simulation with cache misses
+                                if (curr_timeslot == 0) {
+                                    for (int k = 0; k < NUM_OF_SPINES; k++) {
+                                        //printf("attempting to pull flow %d for spine %d\n", flow->flow_id, k);
+                                        spine_t spine = spines[k];
+                                        if (fully_associative) {
+                                            pull_from_dram(spine->sram, spine->dram, flow->flow_id);
+                                        }
+                                        else {
+                                            dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
+                                        }
+                                        
+                                    }
+
+                                }
+#ifdef DEBUG_DRIVER
+                                printf("%d: Node %d has started flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
+#endif
+                            }
+                        }
+                    }
+                }
+                flow = node->current_flow;
+                // Sending Period
+                if ((curr_timeslot % incast_period) < incast_size) {
+                    // Send packets from currently selected flows
+                    if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
+                        int src_node = flow->src;
+                        int dst_node = flow->dst;
+                        int64_t flow_id = flow->flow_id;
+
+                        // Send packets from flow until cwnd is reached or the flow runs out of bytes to send
+                        int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
+                        //int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
+                        //if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
+                        if (flow_bytes_remaining > 0) {
+                            // Determine packet sizee
+                            int64_t size = MTU;
+                            //if (cwnd_bytes_remaining < MTU) {
+                            //    size = cwnd_bytes_remaining;
+                            //}
+                            if (flow_bytes_remaining < size) {
+                                size = flow_bytes_remaining;
+                            }
+                            assert(size > 0);
+
+                            // Create packet
+                            packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
+                            packet_counter++;
+                            node->seq_num[dst_node] += size;
+                            
+                            // Send packet
+                            pkt->time_when_transmitted_from_src = curr_timeslot;
+                            int dst_tor = node_index / NODES_PER_RACK;
+                            pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                            link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
+#ifdef DEBUG_DRIVER
+                            printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
+#endif
+
+                            // Update flow state
+                            if (flow->active == 0) {
+                                flowlist->active_flows++;
+                                flow->start_timeslot = curr_timeslot;
+                                total_flows_started++;
+                            }
+                            flow->active = 1;
+                            flow->pkts_sent++;
+                            flow->bytes_sent += size;
+                            flow->timeslots_active++;
+                            // Determine if last packet of flow has been sent
+                            if (flow->pkts_sent >= flow->flow_size) {
+                                flow->active = 0;
+                                flowlist->active_flows--;
+                            }
+                        }
+                    }
+                }
+                // Recovery Period: send nothing
+                //else {
+                //}    
             }
         }
+        new_period = 0;
 
 /*---------------------------------------------------------------------------*/
                           //ToR -- SEND TO HOST AND SPINE
@@ -293,17 +609,22 @@ void work_per_timeslot()
                 packet_t peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = NULL;
-                    if (program_tors == 0) {
-                        pkt = send_to_spine_baseline(tor, tor_port);
-                    }
-                    else if (enable_sram == 0) {
-                        pkt = send_to_spine_dram_only(tor, tor_port, &cache_misses);
-                    }
-                    else if (fully_associative > 0) {
-                        pkt = send_to_spine(tor, tor_port, &cache_misses, &cache_hits);
+                    if (peek_pkt->control_flag == 0) {
+                        if (program_tors == 0) {
+                            pkt = send_to_spine_baseline(tor, tor_port);
+                        }
+                        else if (enable_sram == 0) {
+                            pkt = send_to_spine_dram_only(tor, tor_port, &cache_misses);
+                        }
+                        else if (fully_associative > 0) {
+                            pkt = send_to_spine(tor, tor_port, &cache_misses, &cache_hits);
+                        }
+                        else {
+                            pkt = send_to_spine_dm(tor, tor_port, &cache_misses, &cache_hits);
+                        }
                     }
                     else {
-                        pkt = send_to_spine_dm(tor, tor_port, &cache_misses, &cache_hits);
+                        pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[tor_port]);
                     }
                     if (pkt != NULL) {
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots; 
@@ -334,9 +655,15 @@ void work_per_timeslot()
 #endif
             }
 
-
             //send to each host
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
+                if (i == 8 && tor_port == 8) {
+                    if (incast_buffer_len > 0 && tor->downstream_pkt_buffer[tor_port]->num_elements == 0) {
+                        incast_sent_on_period = 0;
+                        new_period = 1;
+                    }
+                    incast_buffer_len = tor->downstream_pkt_buffer[tor_port]->num_elements;
+                }
                 int bytes_sent = 0;
                 packet_t peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
@@ -437,16 +764,37 @@ void work_per_timeslot()
                     }
                     peek_pkt = (packet_t) link_peek(links->spine_to_tor_link[src_spine][tor_index]);
                 }
+#ifdef ENABLE_SNAPSHOTS
                 // Receive snapshot
-                // Again, ToR has no SRAM, so no need to receive snapshot
-//                 snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->spine_to_tor_link[src_spine][tor_index]);
-//                 if (snapshot != NULL && snapshot->time_to_dequeue_from_link == curr_timeslot) {
-//                     snapshot = ipg_recv(links->spine_to_tor_link[src_spine][tor_index]);
-//                     free(snapshot);
-// #ifdef DEBUG_SNAPSHOTS
-//                     printf("%d: ToR %d recv snapshot from spine %d\n", (int) curr_timeslot, i, tor_port);
-// #endif
-//                 }
+                snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->spine_to_tor_link[src_spine][tor_index]);
+                if (snapshot != NULL && snapshot->time_to_dequeue_from_link <= curr_timeslot) {
+                    snapshot = ipg_recv(links->spine_to_tor_link[src_spine][tor_index]);
+                    // Process snapshot
+                    for (int cnt = 0; cnt < SNAPSHOT_SIZE; cnt++) {
+                        int64_t snapshot_flow = (int64_t) snapshot->flow_id[cnt];
+                        if (enable_sram != 0 && snapshot_flow >= 0) {
+                            if (fully_associative) {
+                                int is_fresh = 0;
+                                if (access_sram(tor->sram, snapshot_flow, &is_fresh) < 0) {
+                                    printf("pulling flow %d from snapshot\n", snapshot_flow);
+                                    pull_from_dram(tor->sram, tor->dram, snapshot_flow);
+                                    tor->sram->head->fresh = 0;
+                                }
+                            }
+                            else {
+                                int is_fresh = 0;
+                                if (access_dm_sram(tor->dm_sram, snapshot_flow, &is_fresh) < 0) {
+                                    dm_pull_from_dram(tor->dm_sram, tor->dram, snapshot_flow);
+                                }
+                            }
+                        }
+                    }
+                    free(snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                    printf("%d: ToR %d recv snapshot from spine %d\n", (int) curr_timeslot, i, tor_port);
+#endif
+                }
+#endif
             }
         }
 
@@ -504,11 +852,13 @@ void work_per_timeslot()
                     for (int cnt = 0; cnt < SNAPSHOT_SIZE; cnt++) {
                         int64_t snapshot_flow = (int64_t) snapshot->flow_id[cnt];
                         if (enable_sram != 0 && snapshot_flow >= 0) {
+                            //printf("received flow id %d from snapshot\n", snapshot_flow);
                             if (fully_associative) {
                                 int is_fresh = 0;
                                 if (access_sram(spine->sram, snapshot_flow, &is_fresh) < 0) {
                                     pull_from_dram(spine->sram, spine->dram, snapshot_flow);
-                                    //printf("pulling from snapshot\n");
+                                    spine->sram->head->fresh = 0;
+                                    //printf("Pulling flow %d from snapshot\n", snapshot_flow);
                                 }
                             }
                             else {
@@ -606,6 +956,11 @@ void work_per_timeslot()
 /*---------------------------------------------------------------------------*/
                  //Data logging
 /*---------------------------------------------------------------------------*/
+// Update avg max timeperiod
+if (curr_timeslot % incast_period == 0 && curr_timeslot != 0) {
+    avg_max_delay_at_spine = (avg_max_delay_at_spine * (curr_timeslot / incast_period - 1) + max_delay_in_timeperiod) / (curr_timeslot / incast_period);
+    max_delay_in_timeperiod = 0;
+}
 
 /*---------------------------------------------------------------------------*/
                  //State updates before next iteration
@@ -666,6 +1021,16 @@ static inline void usage()
     exit(1);
 }
 
+void shuffle(int * array, size_t n) {
+    if (n > 1) {
+        for (size_t i = 0; i < n - 1; i++) {
+            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+            int t = array[j];
+            array[j] = array[i];
+            array[i] = t;
+        }
+    }
+}
 
 void process_args(int argc, char ** argv) {
     int opt;
@@ -675,7 +1040,7 @@ void process_args(int argc, char ** argv) {
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:p:k:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:p:k:v:x:y:z:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -760,6 +1125,26 @@ void process_args(int argc, char ** argv) {
                 dram_access_time = atof(optarg);
                 printf("DRAM access speed is %d ns\n", dram_access_time);
                 break;
+            case 'v':
+                packet_mode = 1;
+                incast_active = atoi(optarg);
+                printf("Incast %d active flows per incast period\n", incast_active);
+                break;
+            case 'x':
+                packet_mode = 1;
+                incast_switch = atoi(optarg);
+                printf("Incast switching %d flows per incast period\n", incast_switch);
+                break;
+            case 'y':
+                packet_mode = 1;
+                incast_size = atoi(optarg);
+                printf("Incast duration of %d packets\n", incast_size);
+                break;
+            case 'z':
+                packet_mode = 1;
+                incast_pause = atoi(optarg);
+                printf("Incast pause of %d timeslots\n", incast_pause);
+                break;
             case 'f': 
                 if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
@@ -780,6 +1165,9 @@ void process_args(int argc, char ** argv) {
                 exit(1);
         }
     }
+
+    incast_period = incast_size + incast_pause;
+    printf("Incast period duration: %d\n", incast_period);
 
     timeslot_len = (pkt_size * 8) / link_bandwidth;
     printf("Running with a slot length of %fns\n", timeslot_len);
@@ -814,11 +1202,14 @@ void process_args(int argc, char ** argv) {
         spines[i]->sram->capacity = sram_size;
         spines[i]->dm_sram->capacity = sram_size;
         spines[i]->dram->delay = timeslots_per_dram_access;
-        spines[i]->dram->accesses = accesses_per_timeslot;
+        //spines[i]->dram->accesses = accesses_per_timeslot;
+        spines[i]->dram->accesses = timeslot_len;
     }
     for (int i = 0; i < NUM_OF_RACKS; i++) {
         tors[i]->sram->capacity = sram_size;
         tors[i]->dm_sram->capacity = sram_size;
+        tors[i]->dram->delay = timeslots_per_dram_access;
+        spines[i]->dram->accesses = timeslot_len;
     }
     out_fp = open_outfile(out_filename);
 #ifdef WRITE_QUEUELENS
@@ -977,7 +1368,7 @@ int main(int argc, char** argv) {
     process_args(argc, argv);
     
     work_per_timeslot();
-    print_system_stats(spines, tors, total_bytes_rcvd, total_pkts_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits, avg_delay_at_spine, timeslot_len);
+    print_system_stats(spines, tors, total_bytes_rcvd, total_pkts_rcvd, (int64_t) (curr_timeslot * timeslot_len), cache_misses, cache_hits, avg_delay_at_spine, avg_max_delay_at_spine, timeslot_len);
 #ifdef WRITE_QUEUELENS
     write_to_timeseries_outfile(timeseries_fp, spines, tors, curr_timeslot, num_datapoints);
 #endif

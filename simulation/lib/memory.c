@@ -223,9 +223,27 @@ void free_sram(sram_t * sram) {
     free(sram);
 }
 
+void print_sram(sram_t * sram) {
+    lru_node_t * head = sram->head;
+    printf("Current sram state\n");
+    while (head != NULL) {
+        printf("%d, %d || ", (int) head->flow_id, (int) head->val);
+        head = head->next;
+    }
+    printf("\n");
+}
+
+void print_dm_sram(dm_sram_t * sram) {
+    printf("Current sram state\n");
+    for (int i = 0; i < sram->capacity; i++) {
+        printf("%d, %d ||", (int) sram->flow_ids[i], (int) sram->memory[i]);
+    }
+}
+
 void free_dm_sram(dm_sram_t * sram) {
     free(sram->flow_ids);
     free(sram->memory);
+    free(sram->fresh);
     free(sram);
 }
 

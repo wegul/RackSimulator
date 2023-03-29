@@ -20,6 +20,7 @@
 
 void read_tracefile(char * filename);
 void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int flow_size_bytes, int timeslot);
+void shuffle(int * array, size_t n);
 void open_switch_outfiles(char * base_filename);
 
 #endif

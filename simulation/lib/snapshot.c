@@ -1,30 +1,34 @@
 #include "snapshot.h"
 
-snapshot_t * create_snapshot(buffer_t * buffer, int16_t start_idx, int16_t * pkts_recorded) {
-    int snapshot_size = buffer->num_elements - start_idx;
-    if (snapshot_size > SNAPSHOT_SIZE) {
-        snapshot_size = SNAPSHOT_SIZE;
-    }
-    if (snapshot_size < 1) {
-        *pkts_recorded = 0;
-        return NULL;
-    }
+snapshot_t * create_snapshot(buffer_t * buffer, int16_t * pkts_recorded) {
     snapshot_t * snapshot = malloc(sizeof(snapshot_t));
 
+    int curr_pkt = 0;
     for (int i = 0; i < SNAPSHOT_SIZE; i++) {
-        if (i < snapshot_size) {
-            packet_t pkt = (packet_t) buffer_peek(buffer, start_idx + i);
-            if (pkt != NULL) {
-                snapshot->flow_id[i] = pkt->flow_id;
-            }
+        packet_t pkt = (packet_t) buffer_peek(buffer, curr_pkt);
+        while (pkt != NULL && pkt->snapshotted == 1) {
+            curr_pkt++;
+            pkt = (packet_t) buffer_peek(buffer, curr_pkt);
+        }
+
+        if (pkt != NULL) {
+            snapshot->flow_id[i] = pkt->flow_id;
+            //printf("flow %d in snapshot\n", snapshot->flow_id[i]);
+            pkt->snapshotted = 1;
+            pkts_recorded++;
+            curr_pkt++;
         }
         else {
             snapshot->flow_id[i] = -1;
         }
     }
-    snapshot->time_to_dequeue_from_link = 0;
 
-    *pkts_recorded = snapshot_size;
+    if (snapshot->flow_id[0] == -1 && snapshot->flow_id[1] == -1 && snapshot->flow_id[2] == -1 && snapshot->flow_id[3] == -1) {
+        free(snapshot);
+        return NULL;
+    }
+
+    snapshot->time_to_dequeue_from_link = 0;
 
     return snapshot;
 }

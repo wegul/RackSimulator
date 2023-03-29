@@ -20,10 +20,10 @@ struct packet {
     int16_t control_flag; // To distinguish control packets from data packets
     int16_t ecn_flag; // DCTCP Explicit Congestion Notification
 
-    int16_t time_arrived_at_spine;
-    int16_t time_left_spine;
-    int16_t time_spent_at_spine;
-    //int16_t snapshotted; // Used to determine if packet has been snapshot already
+    int time_arrived_at_spine;
+    int time_left_spine;
+    int time_spent_at_spine;
+    int snapshotted; // Used to determine if packet has been snapshot already
 };
 typedef struct packet* packet_t;
 

@@ -38,7 +38,7 @@ void free_spine(spine_t self)
     }
 }
 
-packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int64_t * cache_hits, int timeslot)
+packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int64_t * cache_hits)
 {
     //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
@@ -56,6 +56,8 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
                 (*cache_misses)++;
                 spine->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
+                //pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
+                //return pkt;
             }
             return NULL;
         }
@@ -93,6 +95,8 @@ packet_t send_to_tor_dm(spine_t spine, int16_t tor_num, int64_t * cache_misses, 
                 (*cache_misses)++;
                 spine->dram->accessible[pkt->flow_id] = 0;
                 dm_pull_from_dram(spine->dm_sram, spine->dram, pkt->flow_id);
+                pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
+                return pkt;
             }
             
             return NULL;
@@ -142,9 +146,7 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
 snapshot_t * snapshot_to_tor(spine_t spine, int16_t tor_num)
 {
     int16_t pkts_recorded = 0;
-    //snapshot_t * snapshot = NULL;
-    snapshot_t * snapshot = create_snapshot(spine->pkt_buffer[tor_num], spine->snapshot_idx[tor_num], &pkts_recorded);
-    spine->snapshot_idx[tor_num] += pkts_recorded;
+    snapshot_t * snapshot = create_snapshot(spine->pkt_buffer[tor_num], &pkts_recorded);
     return snapshot;
 }
 

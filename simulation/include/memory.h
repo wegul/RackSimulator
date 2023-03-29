@@ -53,6 +53,9 @@ int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id, int * is_fresh);
 
+void print_sram(sram_t * sram);
+void print_dm_sram(dm_sram_t * sram);
+
 void free_sram(sram_t * sram);
 void free_dm_sram(dm_sram_t * sram);
 void free_dram(dram_t * dram);
