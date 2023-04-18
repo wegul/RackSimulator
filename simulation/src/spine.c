@@ -11,6 +11,7 @@ spine_t create_spine(int16_t spine_index, int32_t sram_size, int16_t init_sram)
         self->pkt_buffer[i] = create_buffer(SPINE_PORT_BUFFER_LEN);
         self->queue_stat[i] = create_timeseries();
         self->snapshot_idx[i] = 0;
+        self->snapshot_list[i] = create_buffer(100);
     }
 
     self->sram = create_sram(sram_size, init_sram);
@@ -27,13 +28,13 @@ void free_spine(spine_t self)
             if (self->pkt_buffer[i] != NULL) {
                 free_buffer(self->pkt_buffer[i]);
             }
+            free_buffer(self->snapshot_list[i]);
             free_timeseries(self->queue_stat[i]);
         }
 
         free_sram(self->sram);
         free_dm_sram(self->dm_sram);
         free_dram(self->dram);
-
         free(self);
     }
 }
@@ -72,6 +73,22 @@ packet_t send_to_tor(spine_t spine, int16_t tor_num, int64_t * cache_misses, int
                 spine->snapshot_idx[tor_num]--;
             }
             pkt = (packet_t) buffer_get(spine->pkt_buffer[tor_num]);
+
+            if (spine->snapshot_list[tor_num]->num_elements > 0) {
+                buffer_get(spine->snapshot_list[tor_num]);
+
+                int64_t * snapshot_id = buffer_peek(spine->snapshot_list[tor_num], 0);
+                printf("%d\n", *snapshot_id);
+
+                if (snapshot_id != NULL && pkt->flow_id == *snapshot_id) {
+                    printf("popped off snapshot\n");
+                    buffer_get(spine->snapshot_list[tor_num]);
+                    
+                }
+                else {
+                    printf("Incorrect!!\n");
+                }
+            }   
         }
     }
     
@@ -160,3 +177,29 @@ int64_t spine_buffer_bytes(spine_t spine, int port)
     return bytes;
 }
 
+int64_t * linearize_spine_queues(spine_t spine, int * q_len) {
+    int lin_queue_len = 0;
+    for (int i = 0; i < NUM_OF_TORS; i++) {
+        lin_queue_len += spine->snapshot_list[i]->num_elements;
+    }
+    int64_t * lin_queue = malloc(sizeof(int64_t) * lin_queue_len);
+
+    int idx = 0;
+    int depth = 0;
+    int valid_entry = 1;
+    while (valid_entry) {
+        valid_entry = 0;
+        for (int i = 0; i < NUM_OF_TORS; i++) {
+            buffer_t * ss_list = spine->snapshot_list[i];
+            if (depth < ss_list->num_elements) {
+                lin_queue[idx] = *((int64_t *) buffer_peek(ss_list, depth));
+                idx++;
+                valid_entry = 1;
+            }
+        }
+        depth++;
+    }
+
+    *q_len = lin_queue_len;
+    return lin_queue;
+}

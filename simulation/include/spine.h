@@ -22,6 +22,8 @@ struct spine {
     sram_t * sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
+    //separate snapshot lists for each downstream port
+    buffer_t * snapshot_list[NUM_OF_TORS];
 };
 typedef struct spine* spine_t;
 
@@ -36,5 +38,6 @@ void clean_sram(spine_t);
 void clean_dm_sram(spine_t);
 snapshot_t * snapshot_to_tor(spine_t, int16_t);
 int64_t spine_buffer_bytes(spine_t, int);
+int64_t * linearize_spine_queues(spine_t, int *);
 
 #endif

@@ -11,6 +11,7 @@ tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
         self->downstream_pkt_buffer[i]
             = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN);
         self->downstream_queue_stat[i] = create_timeseries();
+        self->downstream_snapshot_list[i] = create_buffer(100);
     }
 
     for (int i = 0; i < NUM_OF_SPINES; ++i) {
@@ -18,6 +19,7 @@ tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
             = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
         self->upstream_queue_stat[i] = create_timeseries();
         self->snapshot_idx[i] = 0;
+        self->upstream_snapshot_list[i] = create_buffer(100);
     }
     
     create_routing_table(self->routing_table);
@@ -36,11 +38,13 @@ void free_tor(tor_t self)
         for (int i = 0; i < NODES_PER_RACK; ++i) {
             free_buffer(self->downstream_pkt_buffer[i]);
             free_timeseries(self->downstream_queue_stat[i]);
+            free_buffer(self->downstream_snapshot_list[i]);
         }
 
         for (int i = 0; i < NUM_OF_SPINES; ++i) {
             free_buffer(self->upstream_pkt_buffer[i]);
             free_timeseries(self->upstream_queue_stat[i]);
+            free_buffer(self->upstream_snapshot_list[i]);
         }
 
         free_sram(self->sram);
@@ -166,6 +170,8 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
                 else {
                     dm_pull_from_dram(tor->dm_sram, tor->dram, pkt->flow_id);
                 }
+                //printf("tor %d pulling flow %d from access\n", tor->tor_index, pkt->flow_id);
+                //print_sram(tor->sram);
             }
             return NULL;
         }
@@ -177,6 +183,18 @@ packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64
             }
 
             pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
+
+            if (tor->downstream_snapshot_list[host_within_tor]->num_elements > 0) {
+                int64_t id = pkt->flow_id;
+                for(int i = 0; i < tor->downstream_snapshot_list[host_within_tor]->num_elements; i++) {
+                    buff_node_t * node = buffer_peek(tor->downstream_snapshot_list[host_within_tor], i);
+                    if (node->val == id) {
+                        node = buffer_remove(tor->downstream_snapshot_list[host_within_tor], i);
+                        free(node);
+                        break;
+                    }
+                }
+            }   
         }
     }
 
@@ -239,4 +257,37 @@ int64_t tor_down_buffer_bytes(tor_t tor, int port)
         bytes += pkt->size;
     }
     return bytes;
+}
+
+int64_t * linearize_tor_downstream_queues(tor_t tor, int * q_len){ 
+    int lin_queue_len = 0;
+    for (int i = 0; i < NODES_PER_RACK; i++) {
+        lin_queue_len += tor->downstream_snapshot_list[i]->num_elements;
+    }
+
+    if (lin_queue_len < 1) {
+        return 0;
+    }
+
+    int64_t * lin_queue = malloc(sizeof(int64_t) * lin_queue_len);
+
+    int idx = 0;
+    int depth = 0;
+    int valid_entry = 1;
+    while (valid_entry) {
+        valid_entry = 0;
+        for (int i = 0; i < NODES_PER_RACK; i++) {
+            buffer_t * ss_list = tor->downstream_snapshot_list[i];
+            if (depth < ss_list->num_elements) {
+                buff_node_t * node = (buff_node_t *) buffer_peek(ss_list, depth);
+                lin_queue[idx] = node->val;
+                idx++;
+                valid_entry = 1;
+            }
+        }
+        depth++;
+    }
+
+    *q_len = lin_queue_len;
+    return lin_queue;
 }

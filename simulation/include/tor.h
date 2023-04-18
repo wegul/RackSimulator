@@ -24,6 +24,10 @@ struct tor {
     sram_t * sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
+    //separate snapshot lists for each upstream and downstream port
+    buffer_t * upstream_snapshot_list[NUM_OF_SPINES];
+    buffer_t * downstream_snapshot_list[NODES_PER_RACK];
+    //checks if a memory access was done on this timeslot
 };
 typedef struct tor* tor_t;
 
@@ -41,5 +45,6 @@ packet_t send_to_host_dram_only(tor_t tor, int16_t host_within_tor, int64_t * ca
 snapshot_t * snapshot_to_spine(tor_t, int16_t);
 int64_t tor_up_buffer_bytes(tor_t, int);
 int64_t tor_down_buffer_bytes(tor_t, int);
+int64_t * linearize_tor_downstream_queues(tor_t, int *);
 
 #endif

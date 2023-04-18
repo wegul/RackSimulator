@@ -181,6 +181,18 @@ int64_t access_sram(sram_t * sram, int64_t flow_id, int * is_fresh) {
     return -1;
 }
 
+int64_t access_sram_no_fresh(sram_t * sram, int64_t flow_id) {
+    lru_node_t * node = remove_node(&(sram->head), flow_id);
+    if (node != NULL) {
+        // Cache hit
+        node->val++;
+        push(&(sram->head), node);
+        return node->val;
+    }
+    // Cache miss
+    return -1;
+}
+
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id) {
     int64_t evict_id = sram->flow_ids[flow_id % sram->capacity];
     dram->memory[evict_id] = sram->memory[evict_id % sram->capacity];
@@ -212,6 +224,23 @@ int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id, int * is_fresh) {
     return -1; // FAILURE!!!
 }
 
+int64_t reorganize_sram(sram_t * sram, buffer_t * buffer) {
+    // buffer must be a buffer of int64_t from snapshot
+    int k = -1;
+    for (int i = buffer->num_elements - 1; i >= 0; i--) {
+        int64_t * id = (int64_t *) buffer_peek(buffer, i);
+        int is_fresh = 0;
+        int result = access_sram(sram, *id, &is_fresh);
+        if (result >= 0 && is_fresh == 1) {
+            sram->head->fresh = 1;
+        }
+        if (result < 0) {
+            k = *id;
+        }
+    }
+    return k;
+}
+
 void free_sram(sram_t * sram) {
     lru_node_t * head = sram->head;
     while (head != NULL) {
@@ -238,6 +267,48 @@ void print_dm_sram(dm_sram_t * sram) {
     for (int i = 0; i < sram->capacity; i++) {
         printf("%d, %d ||", (int) sram->flow_ids[i], (int) sram->memory[i]);
     }
+}
+
+int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len) {
+    //printf("here\n");
+    if (q_len > 0) {
+        for (int j = 0; j < q_len; j++) {
+            int64_t id = lin_queue[j];
+            if (access_sram_no_fresh(sram, id) < 0) {
+                lru_node_t * node = create_lru_node(id, dram->memory[id]);
+                node->fresh = 0;
+                push(&(sram->head), node);
+                sram->count++;
+                if (sram->count > sram->capacity) {
+                    evict_belady(sram, dram, lin_queue, q_len);
+                }
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
+int64_t evict_belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len) {
+    if (q_len > 0) {
+        // Find flow in SRAM latest to be accessed
+        for (int i = q_len - 1; i >= 0; i--) {
+            int64_t id = lin_queue[i];
+            access_sram_no_fresh(sram, id);
+        }
+        // Last index will be latest to access
+        lru_node_t * evicted = pop(&(sram->head));
+        sram->count--;
+        int64_t flow_id = evicted->flow_id;
+        int64_t val = evicted->val;
+        dram->memory[flow_id % DRAM_SIZE] = val;
+        free(evicted);
+        return flow_id;
+    }
+    else {
+        evict_from_sram(sram, dram);
+    }
+    return -1;
 }
 
 void free_dm_sram(dm_sram_t * sram) {

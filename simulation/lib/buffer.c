@@ -78,6 +78,16 @@ void * buffer_peek(buffer_t * self, int32_t index) {
     return element;
 }
 
+void print_buffer(buffer_t * self) {
+    printf("Printing buffer of capacity %d / %d\n", self->num_elements, self->size);
+    for (int i = 0; i < self->size; i++) {
+        if (self->buffer[i] != NULL) {
+            printf("%d, ", *((int *) self->buffer[i]));
+        }
+    }
+    printf("\n");
+}
+
 void buffer_clear(buffer_t * self) {
     if (self != NULL && self->buffer != NULL) {
         for (int i = 0; i < self->size; i++) {

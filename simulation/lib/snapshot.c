@@ -6,14 +6,15 @@ snapshot_t * create_snapshot(buffer_t * buffer, int16_t * pkts_recorded) {
     int curr_pkt = 0;
     for (int i = 0; i < SNAPSHOT_SIZE; i++) {
         packet_t pkt = (packet_t) buffer_peek(buffer, curr_pkt);
-        while (pkt != NULL && pkt->snapshotted == 1) {
+
+        while (pkt != NULL && pkt->control_flag == 0 && pkt->snapshotted == 1) {
+        //while (pkt != NULL && pkt->control_flag == 0) {
             curr_pkt++;
             pkt = (packet_t) buffer_peek(buffer, curr_pkt);
         }
 
         if (pkt != NULL) {
             snapshot->flow_id[i] = pkt->flow_id;
-            //printf("flow %d in snapshot\n", snapshot->flow_id[i]);
             pkt->snapshotted = 1;
             pkts_recorded++;
             curr_pkt++;

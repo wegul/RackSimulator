@@ -23,12 +23,17 @@ typedef struct buffer {
     void ** buffer;
 } buffer_t;
 
+typedef struct buff_node { 
+    int64_t val;
+} buff_node_t;
+
 buffer_t * create_buffer(int32_t);
 int8_t buffer_insert(buffer_t *, void *, int32_t);
 int8_t buffer_put(buffer_t *, void*);
 void * buffer_get(buffer_t *);
 void * buffer_peek(buffer_t *, int32_t);
 void * buffer_remove(buffer_t *, int32_t);
+void print_buffer(buffer_t *);
 void buffer_clear(buffer_t *);
 void free_buffer(buffer_t *);
 
