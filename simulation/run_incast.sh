@@ -13,22 +13,26 @@ make clean
 make all
 
 bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 80
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 70
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 60
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 50
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 72
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 64
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 56
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 48
 bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 40
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 30
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 20
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 10
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 32
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 24
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 16
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 8
 
 make clean
 make INCLUDE_SNAPSHOTS='"TRUE"'
 
 bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 80
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 70
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 60
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 50
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 72
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 64
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 56
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 48
 bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 40
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 30
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 20
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 10
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 32
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 24
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 16
+bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 8

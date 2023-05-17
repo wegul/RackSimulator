@@ -7,7 +7,6 @@
 typedef struct lru_node {
     int64_t flow_id;
     int64_t val;
-    int fresh;
     struct lru_node * next;
 } lru_node_t;
 
@@ -23,7 +22,6 @@ typedef struct dm_sram {
     int32_t capacity;
     int64_t * flow_ids;
     int64_t * memory;
-    int * fresh;
 } dm_sram_t;
 
 typedef struct dram {
@@ -48,12 +46,12 @@ void initialize_dm_sram(dm_sram_t * dm_sram);
 
 int64_t evict_from_sram(sram_t * sram, dram_t * dram);
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id);
-int64_t access_sram(sram_t * sram, int64_t flow_id, int * is_fresh);
+int64_t access_sram(sram_t * sram, int64_t flow_id);
 int64_t access_sram_no_fresh(sram_t * sram, int64_t flow_id);
 
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
-int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id, int * is_fresh);
+int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id);
 
 int64_t reorganize_sram(sram_t * sram, buffer_t * buffer);
 int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len);

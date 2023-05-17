@@ -8,7 +8,7 @@ do
 done
 
 make clean
-make all
+make INCLUDE_SNAPSHOTS='"TRUE"'
 
 bin/driver -f $filename -a 1 -l $load -u $burst -s 800
 bin/driver -f $filename -a 1 -l $load -u $burst -s 700

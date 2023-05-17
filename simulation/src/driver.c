@@ -7,7 +7,7 @@ static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
 #ifdef ENABLE_SNAPSHOTS
 static int snapshot_epoch = 1; //timeslots between snapshots
-static int belady_epoch = 2;
+static int belady_epoch = 10;
 #endif
 
 int16_t header_overhead = 64;
@@ -51,12 +51,12 @@ static volatile int8_t terminate3 = 0;
 static volatile int8_t terminate4 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
-int64_t num_of_flows_to_finish = 500000; //stop after these many flows finish
+int64_t num_of_flows_to_finish = 50000; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
-int64_t num_of_flows_to_start = 500000; //stop after these many flows start
+int64_t num_of_flows_to_start = 50000; //stop after these many flows start
 
-volatile int64_t max_timeslots = 30000; // extern var
+volatile int64_t max_timeslots = 5000; // extern var
 
 // Output files
 FILE * out_fp = NULL;
@@ -144,7 +144,12 @@ void work_per_timeslot()
                             pkt = send_to_tor_dram_only(spine, k, &cache_misses);
                         }
                         else if (fully_associative > 0) {
-                            pkt = send_to_tor(spine, k, &spine_cache_misses, &spine_cache_hits);
+                            int misses_before = cache_misses;
+                            //pkt = send_to_tor(spine, k, &spine_cache_misses, &spine_cache_hits);
+                            pkt = send_to_tor(spine, k, &cache_misses, &cache_hits);
+                            if (misses_before > cache_misses) {
+                                spine->access_on_this_timeslot = 1;
+                            }
                         }
                         else {
                             int cache_misses_before = cache_misses;
@@ -254,6 +259,27 @@ void work_per_timeslot()
 #ifdef DEBUG_DRIVER
                             printf("%d: Node %d has started new burst on flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
 #endif
+                        }
+                        // Ensure initial flows exist in memory already so as not to flood cache misses start of simlation
+                        if (node->current_flow != NULL && curr_timeslot == 0) {
+                            for (int k = 0; k < NUM_OF_SPINES; k++) {
+                                spine_t spine = spines[k];
+                                if (fully_associative) {
+                                    pull_from_dram(spine->sram, spine->dram, flow->flow_id);
+                                }
+                                else {
+                                    dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
+                                }
+                            }
+                            for (int k = 0; k < NUM_OF_RACKS; k++) {
+                                tor_t tor = tors[k];
+                                if (fully_associative) {
+                                    pull_from_dram(tor->sram, tor->dram, flow->flow_id);
+                                }
+                                else {
+                                    dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
+                            }
+                        }
                         }
                     }
                     // Burst size has not been reached; keep sending from current flow
@@ -679,7 +705,11 @@ void work_per_timeslot()
                             pkt = send_to_host_dram_only(tor, tor_port, &cache_misses);
                         }
                         else {
+                            int misses_before = cache_misses;
                             pkt = send_to_host(tor, tor_port, fully_associative, &cache_misses, &cache_hits);
+                            if (misses_before > cache_misses) {
+                                tor->access_on_this_timeslot = 1;
+                            }
                         }
                     }
                     else {
@@ -798,7 +828,7 @@ void work_per_timeslot()
             }
             // Prefetch w/ Belady's 
 #ifdef ENABLE_SNAPSHOTS 
-            if (curr_timeslot % belady_epoch == 0) {
+            if (curr_timeslot % belady_epoch == 0 && tor->access_on_this_timeslot == 0) {
                 int q_len = 0;
                 int64_t * lin_queue = linearize_tor_downstream_queues(tor, &q_len);
 
@@ -807,6 +837,7 @@ void work_per_timeslot()
                     free(lin_queue);
                 }
             }
+            tor->access_on_this_timeslot = 0;
 #endif
         }
 
@@ -858,36 +889,42 @@ void work_per_timeslot()
 #ifdef ENABLE_SNAPSHOTS
                 // Receive snapshot
                 snapshot_t * snapshot = (snapshot_t * ) ipg_peek(links->tor_to_spine_link[src_tor][spine_index]);
-                if (snapshot != NULL && snapshot->time_to_dequeue_from_link <= curr_timeslot) {
+                if (snapshot != NULL) {
                     snapshot = ipg_recv(links->tor_to_spine_link[src_tor][spine_index]);
                     // process snapshot 
                     for (int cnt = 0; cnt < SNAPSHOT_SIZE; cnt++) {
                         int64_t snapshot_flow = (int64_t) snapshot->flow_id[cnt];
                         if (enable_sram != 0 && snapshot_flow >= 0) {
-                            //printf("received flow id %d from snapshot\n", snapshot_flow);
                             int64_t flow_id = snapshot_flow;
                             flow_t * flow = check_flow(flowlist, flow_id);
                             int64_t dst_node = flow->dst;
                             int dst_tor = dst_node / NODES_PER_RACK;
-                            buffer_put(spine->snapshot_list[dst_tor], &flow_id);
-                            print_buffer(spine->snapshot_list[dst_tor]);
+                            buff_node_t * node = malloc(sizeof(buff_node_t));
+                            node->val = flow_id;
+                            buffer_put(spine->snapshot_list[dst_tor], node);
                         }
                     }
-                    int q_len = 0;
-                    int64_t * lin_queue = linearize_spine_queues(spine, &q_len);
-                    if (q_len > 0) {
-                        belady(spine->sram, spine->dram, lin_queue, q_len);
-                    }
-                    free(lin_queue);
+
                     free(snapshot);
 #ifdef DEBUG_SNAPSHOTS
                     printf("%d: Spine %d recv snapshot from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
 #endif
-
                 }
 #endif
-
             }
+            // Prefetch with Belady's
+#ifdef ENABLE_SNAPSHOTS
+            if (curr_timeslot % belady_epoch == 0 && spine->access_on_this_timeslot == 0) {
+                int q_len = 0;
+                int64_t * lin_queue = linearize_spine_queues(spine, &q_len);
+
+                if (q_len > 0) {
+                    belady(spine->sram, spine->dram, lin_queue, q_len);
+                    free(lin_queue);
+                }
+            }
+            spine->access_on_this_timeslot = 0;
+#endif
         }
 
 /*---------------------------------------------------------------------------*/
@@ -932,7 +969,6 @@ void work_per_timeslot()
                     total_pkts_rcvd++;
 
                     if (flow->pkts_received == flow->flow_size) {
-                        assert(flow->bytes_sent == flow->bytes_received);
                         flow->active = 0;
                         flow->finished = 1;
                         flow->finish_timeslot = curr_timeslot;
@@ -965,11 +1001,11 @@ void work_per_timeslot()
 /*---------------------------------------------------------------------------*/
                  //Data logging
 /*---------------------------------------------------------------------------*/
-// Update avg max timeperiod
-if (curr_timeslot % incast_period == 0 && curr_timeslot != 0) {
-    avg_max_delay_at_spine = (avg_max_delay_at_spine * (curr_timeslot / incast_period - 1) + max_delay_in_timeperiod) / (curr_timeslot / incast_period);
-    max_delay_in_timeperiod = 0;
-}
+        // Update avg max timeperiod
+        if (curr_timeslot % incast_period == 0 && curr_timeslot != 0) {
+            avg_max_delay_at_spine = (avg_max_delay_at_spine * (curr_timeslot / incast_period - 1) + max_delay_in_timeperiod) / (curr_timeslot / incast_period);
+            max_delay_in_timeperiod = 0;
+        }
 
 /*---------------------------------------------------------------------------*/
                  //State updates before next iteration
@@ -1011,11 +1047,11 @@ if (curr_timeslot % incast_period == 0 && curr_timeslot != 0) {
             break;
         }
 
-        if (curr_timeslot % 100 == 0) {
+        if (curr_timeslot % 50 == 0) {
             printf(".");
         }
-        if (curr_timeslot % 10000 == 9999) {
-            printf("\n");
+        if (curr_timeslot % 1000 == 999) {
+            printf(".\n");
         }
 
         curr_timeslot++;
@@ -1247,7 +1283,7 @@ void read_tracefile(char * filename) {
             flow_size_pkts = flow_size_bytes / MTU;
             initialize_flow(flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);
             // Final timeslot is start time of last flow
-            max_timeslots = timeslot;
+            //max_timeslots = timeslot;
         }
         
         printf("Flows initialized\n");

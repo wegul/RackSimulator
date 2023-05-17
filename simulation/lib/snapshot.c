@@ -24,7 +24,7 @@ snapshot_t * create_snapshot(buffer_t * buffer, int16_t * pkts_recorded) {
         }
     }
 
-    if (snapshot->flow_id[0] == -1 && snapshot->flow_id[1] == -1 && snapshot->flow_id[2] == -1 && snapshot->flow_id[3] == -1) {
+    if (snapshot->flow_id[0] == -1) {
         free(snapshot);
         return NULL;
     }
