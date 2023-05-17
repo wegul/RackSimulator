@@ -50,6 +50,14 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
     pkt = (packet_t) buffer_peek(spine->pkt_buffer[port], 0);
     // Packet buffer on this port is not empty
     if (pkt != NULL) {
+        // Do not process packet if marked by control flag
+        if (pkt->control_flag == 1) {
+            pkt = (packet_t) buffer_get(spine->pkt_buffer[port]);
+            int dst_host = pkt->dst_node;
+            int dst_tor = dst_host / NODES_PER_RACK;
+            assert(buffer_put(spine->send_buffer[dst_tor], pkt) != -1);
+            return process_packets(spine, port, cache_misses, cache_hits);
+        }
         int64_t val = access_sram(spine->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {

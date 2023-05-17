@@ -64,8 +64,16 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
     packet_t pkt = NULL;
 
     pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[port], 0);
+
     // Packet buffer on this port is not empty
     if (pkt != NULL) {
+        // Do not process packet if marked by control flag
+        if (pkt->control_flag == 1) {
+            pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[port]);
+            int dst_spine = hash(tor->routing_table, pkt->flow_id);
+            assert(buffer_put(tor->upstream_send_buffer[dst_spine], pkt) != -1);
+            return process_packets_up(tor, port, cache_misses, cache_hits);
+        }
         int64_t val = access_sram(tor->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
@@ -129,8 +137,7 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id, int64_t * cache_misses, i
 
     pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);
     if (pkt != NULL) {
-        int is_fresh = 0;
-        int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id, &is_fresh);
+        int64_t val = access_dm_sram(tor->dm_sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
             (*cache_misses)++;
@@ -177,9 +184,16 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
     //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
 
-    pkt = (packet_t) bufer_peek(tor->downstream_pkt_buffer[port], 0);
+    pkt = (packet_t) buffer_peek(tor->downstream_pkt_buffer[port], 0);
     // Packet buffer on this port is not empty
     if (pkt != NULL) {
+        // Do not process packet if marked by control flag
+        if (pkt->control_flag == 1) {
+            pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[port]);
+            int dst_host = pkt->dst_node % NODES_PER_RACK;
+            assert(buffer_put(tor->downstream_send_buffer[dst_host], pkt) != -1);
+            return process_packets_down(tor, port, cache_misses, cache_hits);
+        }
         int64_t val = access_sram(tor->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
@@ -202,6 +216,8 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
             return move_to_down_send_buffer(tor, port);
         }
     }
+
+    return NULL;
 }
 
 packet_t move_to_down_send_buffer(tor_t tor, int16_t port) {
@@ -225,7 +241,7 @@ packet_t move_to_down_send_buffer(tor_t tor, int16_t port) {
     return pkt;
 }
 
-packet_t send_to_host(tor_t tor, int16_t host_within_tor, int16_t fa_sram, int64_t * cache_misses, int64_t * cache_hits)
+packet_t send_to_host(tor_t tor, int16_t host_within_tor)
 {
     packet_t pkt = NULL;
     pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
@@ -254,12 +270,12 @@ packet_t send_to_host_dram_only(tor_t tor, int16_t host_within_tor, int64_t * ca
 }
 
 packet_t send_to_spine_baseline(tor_t tor, int16_t spine_id) {
-    packet_t pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[spine_id]);
+    packet_t pkt = (packet_t) buffer_get(tor->upstream_send_buffer[spine_id]);
     return pkt;
 }
 
 packet_t send_to_host_baseline(tor_t tor, int16_t host_within_tor) {
-    packet_t pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[host_within_tor]);
+    packet_t pkt = (packet_t) buffer_get(tor->downstream_send_buffer[host_within_tor]);
     return pkt;
 }
 

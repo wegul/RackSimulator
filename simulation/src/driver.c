@@ -105,6 +105,50 @@ void work_per_timeslot()
         }
 
 /*---------------------------------------------------------------------------*/
+                                  //SPINE -- PROCESS
+/*---------------------------------------------------------------------------*/
+
+        for (int i = 0; i < NUM_OF_SPINES; i++) {
+            spine_t spine = spines[i];
+            int16_t spine_index = spine->spine_index;
+
+            // Process packets for each port
+            for (int j = 0; j < SPINE_PORT_COUNT; j++) {
+                int64_t misses_before = cache_misses;
+                process_packets(spine, j, &cache_misses, &cache_hits);
+                if (misses_before != cache_misses) {
+                    spine->access_on_this_timeslot = 1;    
+                }
+            }
+        }
+/*---------------------------------------------------------------------------*/
+                                  //ToR -- PROCESS
+/*---------------------------------------------------------------------------*/
+
+        for (int i = 0; i < NUM_OF_RACKS; i++) {
+            tor_t tor = tors[i];
+            int16_t tor_index = tor->tor_index;
+
+            // Process packets on upstream pipelines
+            for (int j = 0; j < NODES_PER_RACK; j++) {
+                int64_t misses_before = cache_misses;
+                process_packets_up(tor, j, &cache_misses, &cache_hits);
+                if (misses_before != cache_misses) {
+                    tor->access_on_this_timeslot = 1;
+                }
+            }
+
+            // Process packets on downstream pipelines
+            for (int j = 0; j < NUM_OF_SPINES; j++) {
+                int64_t misses_before = cache_misses;
+                process_packets_down(tor, j, &cache_misses, &cache_hits);
+                if (misses_before != cache_misses) {
+                    tor->access_on_this_timeslot = 1;
+                }
+            }
+        }
+
+/*---------------------------------------------------------------------------*/
                                   //SPINE -- SEND
 /*---------------------------------------------------------------------------*/
 
@@ -135,39 +179,13 @@ void work_per_timeslot()
 
                 //send the packet
                 int bytes_sent = 0;
-                packet_t peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
+                packet_t peek_pkt = buffer_peek(spine->send_buffer[k], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot){
-                    int pulled_on_this_timeslot = 0;
                     packet_t pkt = NULL;
-                    if (peek_pkt->control_flag == 0) {
-                        if (enable_sram == 0) {
-                            pkt = send_to_tor_dram_only(spine, k, &cache_misses);
-                        }
-                        else if (fully_associative > 0) {
-                            int misses_before = cache_misses;
-                            //pkt = send_to_tor(spine, k, &spine_cache_misses, &spine_cache_hits);
-                            pkt = send_to_tor(spine, k, &cache_misses, &cache_hits);
-                            if (misses_before > cache_misses) {
-                                spine->access_on_this_timeslot = 1;
-                            }
-                        }
-                        else {
-                            int cache_misses_before = cache_misses;
-                            pkt = send_to_tor_dm(spine, k, &cache_misses, &cache_hits);
-                            if (cache_misses_before != cache_misses) {
-                                pulled_on_this_timeslot = 1;
-                            }
-                        }
-                    }
-                    else {
-                        pkt = (packet_t) buffer_get(spine->pkt_buffer[k]);
-                    }
+                    pkt = (packet_t) buffer_get(spine->send_buffer[k]);
                     if (pkt != NULL) {
                         pkt->time_left_spine = curr_timeslot;
                         pkt->time_spent_at_spine = pkt->time_left_spine - pkt->time_arrived_at_spine;
-                        if (pulled_on_this_timeslot > 0) {
-                            pkt->time_spent_at_spine += timeslots_per_dram_access;
-                        }
                         //printf("delay: %0.3f\nrecorded: %d\n", avg_max_delay_at_spine, pkt_delays_recorded);
                         avg_delay_at_spine = (avg_delay_at_spine * pkt_delays_recorded + pkt->time_spent_at_spine) / (pkt_delays_recorded + 1);
                         pkt_delays_recorded++;
@@ -176,15 +194,12 @@ void work_per_timeslot()
                         }
                         pkt->time_to_dequeue_from_link = curr_timeslot +
                             per_hop_propagation_delay_in_timeslots;
-                        if (pulled_on_this_timeslot > 0) {
-                            pkt->time_to_dequeue_from_link += timeslots_per_dram_access;
-                        }
                         link_enqueue(links->spine_to_tor_link[spine_index][k], pkt);
 #ifdef DEBUG_DRIVER
                         printf("%d: spine %d sent pkt to ToR %d\n", (int) curr_timeslot, i, k);
 #endif
                         bytes_sent += pkt->size;
-                        peek_pkt = buffer_peek(spine->pkt_buffer[k], 0);
+                        peek_pkt = buffer_peek(spine->send_buffer[k], 0);
                     }
                     else {
                         break;
@@ -632,28 +647,26 @@ void work_per_timeslot()
 
             //send to each spine
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
+#ifdef ENABLE_SNAPSHOTS
+                //send snapshots every snapshot_epoch
+                if (curr_timeslot % snapshot_epoch == 0) {
+                    snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
+                    if (snapshot != NULL) {
+                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                        ipg_send(links->tor_to_spine_link[tor_index][tor_port], snapshot);
+#ifdef DEBUG_SNAPSHOTS
+                        printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
+#endif
+
+                    }
+                }
+#endif
+                // Send packets to spine
                 int bytes_sent = 0;
-                packet_t peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
+                packet_t peek_pkt = buffer_peek(tor->upstream_send_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = NULL;
-                    if (peek_pkt->control_flag == 0) {
-                        pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[tor_port]);
-                        // if (program_tors == 0) {
-                        //     pkt = send_to_spine_baseline(tor, tor_port);
-                        // }
-                        // else if (enable_sram == 0) {
-                        //     pkt = send_to_spine_dram_only(tor, tor_port, &cache_misses);
-                        // }
-                        // else if (fully_associative > 0) {
-                        //     pkt = send_to_spine(tor, tor_port, &cache_misses, &cache_hits);
-                        // }
-                        // else {
-                        //     pkt = send_to_spine_dm(tor, tor_port, &cache_misses, &cache_hits);
-                        // }
-                    }
-                    else {
-                        pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[tor_port]);
-                    }
+                    pkt = (packet_t) buffer_get(tor->upstream_send_buffer[tor_port]);
                     if (pkt != NULL) {
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots; 
                         link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
@@ -661,27 +674,13 @@ void work_per_timeslot()
                         printf("%d: ToR %d sent pkt to spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
                         bytes_sent += pkt->size;
-                        peek_pkt = buffer_peek(tor->upstream_pkt_buffer[tor_port], 0);
+                        peek_pkt = buffer_peek(tor->upstream_send_buffer[tor_port], 0);
                     }
                     else {
                         break;
                     }
                 }
-#ifdef ENABLE_SNAPSHOTS
-                //send snapshots every snapshot_epoch
-                if (curr_timeslot % snapshot_epoch == 0) {
-                    snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
-                    int elem = tor->upstream_pkt_buffer[tor_port]->num_elements;
-                    if (snapshot != NULL) {
-                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                        ipg_send(links->tor_to_spine_link[tor_index][tor_port], snapshot);
-#ifdef DEBUG_SNAPSHOTS
-                    printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
-#endif
 
-                    }
-                }
-#endif
             }
 
             //send to each host
@@ -694,27 +693,10 @@ void work_per_timeslot()
                     incast_buffer_len = tor->downstream_pkt_buffer[tor_port]->num_elements;
                 }
                 int bytes_sent = 0;
-                packet_t peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
+                packet_t peek_pkt = buffer_peek(tor->downstream_send_buffer[tor_port], 0);
                 while (peek_pkt != NULL && bytes_sent + peek_pkt->size <= bytes_per_timeslot) {
                     packet_t pkt = NULL;
-                    if (peek_pkt->control_flag == 0) {
-                        if (program_tors == 0) {
-                            pkt = send_to_host_baseline(tor, tor_port);
-                        }
-                        else if (enable_sram == 0) {
-                            pkt = send_to_host_dram_only(tor, tor_port, &cache_misses);
-                        }
-                        else {
-                            int misses_before = cache_misses;
-                            pkt = send_to_host(tor, tor_port, fully_associative, &cache_misses, &cache_hits);
-                            if (misses_before > cache_misses) {
-                                tor->access_on_this_timeslot = 1;
-                            }
-                        }
-                    }
-                    else {
-                        pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[tor_port]);
-                    }
+                    pkt = (packet_t) buffer_get(tor->downstream_send_buffer[tor_port]);
                     
                     if (pkt != NULL) {
                         int16_t dst_host = pkt->dst_node;
@@ -725,7 +707,7 @@ void work_per_timeslot()
                         print_packet(pkt);
 #endif
                         bytes_sent += pkt->size;
-                        peek_pkt = buffer_peek(tor->downstream_pkt_buffer[tor_port], 0);
+                        peek_pkt = buffer_peek(tor->downstream_send_buffer[tor_port], 0);
                     }
                     else {
                         break;
@@ -749,13 +731,12 @@ void work_per_timeslot()
                 int bytes_rcvd = 0;
                 packet_t peek_pkt = (packet_t) link_peek(links->host_to_tor_link[src_host][tor_index]);
                 while (peek_pkt != NULL && peek_pkt->time_to_dequeue_from_link == curr_timeslot && bytes_rcvd + peek_pkt->size <= bytes_per_timeslot) {
-                    int spine_id = hash(tor->routing_table, peek_pkt->flow_id);
                     packet_t pkt = (packet_t)
                         link_dequeue(links->host_to_tor_link[src_host][tor_index]);
                     if (pkt != NULL) {
-                        buffer_put(tor->upstream_pkt_buffer[spine_id], pkt);
+                        buffer_put(tor->upstream_pkt_buffer[tor_port], pkt);
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
-                        if (tor->upstream_pkt_buffer[spine_id]->num_elements > ECN_CUTOFF_TOR_UP) {
+                        if (tor->upstream_pkt_buffer[tor_port]->num_elements > ECN_CUTOFF_TOR_UP) {
                             pkt->ecn_flag = 1;
 #ifdef DEBUG_DCTCP
                             printf("%d: ToR %d marked upstream pkt with ECN\n", (int) curr_timeslot, i);
@@ -784,10 +765,9 @@ void work_per_timeslot()
                     packet_t pkt = (packet_t)
                         link_dequeue(links->spine_to_tor_link[src_spine][tor_index]);
                     if (pkt != NULL) {
-                        int node_index = pkt->dst_node % NODES_PER_RACK;
-                        buffer_put(tor->downstream_pkt_buffer[node_index], pkt);
+                        buffer_put(tor->downstream_pkt_buffer[tor_port], pkt);
                         // DCTCP: Mark packet when adding packet exceeds ECN cutoff
-                        if (tor->downstream_pkt_buffer[node_index]->num_elements > ECN_CUTOFF_TOR_DOWN) {
+                        if (tor->downstream_pkt_buffer[tor_port]->num_elements > ECN_CUTOFF_TOR_DOWN) {
                             pkt->ecn_flag = 1;
 #ifdef DEBUG_DCTCP
                             printf("%d: ToR %d marked downstream pkt with ECN\n", (int) curr_timeslot, i);
@@ -814,12 +794,9 @@ void work_per_timeslot()
                         if (enable_sram != 0 && snapshot_flow >= 0) {
                             int64_t flow_id = snapshot_flow;
                             // Determine destination for flow
-                            flow_t * flow = check_flow(flowlist, flow_id);
-                            int64_t dst_node = flow->dst;
-                            int node_index = dst_node % NODES_PER_RACK;
                             buff_node_t * node = malloc(sizeof(buff_node_t));
                             node->val = flow_id;
-                            buffer_put(tor->downstream_snapshot_list[node_index], node);
+                            buffer_put(tor->downstream_snapshot_list[tor_port], node);
                         }
                     }
                     free(snapshot);
@@ -865,23 +842,15 @@ void work_per_timeslot()
                     fprintf(spine_outfiles[i], "%d, %d, %d, %d, %d\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) spine_port, (int) (curr_timeslot * timeslot_len));
 #endif
                     //enq packet in the virtual queue
-                    int16_t dst_host = pkt->dst_node;
-                    int16_t dst_tor = dst_host / NODES_PER_RACK;
-                    if (dst_host != -1) {
-                        pkt->time_when_added_to_spine_queue = curr_timeslot;
-                        pkt->time_arrived_at_spine = curr_timeslot;
-                        assert(buffer_put(spine->pkt_buffer[dst_tor], pkt) != -1);
-                        // DCTCP: Mark packet when adding packet exceeds ECN cutoff
-                        if (spine->pkt_buffer[dst_tor]->num_elements > ECN_CUTOFF_SPINE) {
-                            pkt->ecn_flag = 1;
+                    pkt->time_when_added_to_spine_queue = curr_timeslot;
+                    pkt->time_arrived_at_spine = curr_timeslot;
+                    assert(buffer_put(spine->pkt_buffer[spine_port], pkt) != -1);
+                    // DCTCP: Mark packet when adding packet exceeds ECN cutoff
+                    if (spine->pkt_buffer[spine_port]->num_elements > ECN_CUTOFF_SPINE) {
+                        pkt->ecn_flag = 1;
 #ifdef DEBUG_DCTCP
-                            printf("%d: Spine %d marked pkt with ECN\n", (int) curr_timeslot, spine_index);
+                        printf("%d: Spine %d marked pkt with ECN\n", (int) curr_timeslot, spine_index);
 #endif
-                        }
-
-                        if (dst_host == -1) {
-                            free_packet(pkt);
-                        }
                     }
                     bytes_rcvd += pkt->size;
                     peek_pkt = (packet_t) link_peek(links->tor_to_spine_link[src_tor][spine_index]);
@@ -896,12 +865,9 @@ void work_per_timeslot()
                         int64_t snapshot_flow = (int64_t) snapshot->flow_id[cnt];
                         if (enable_sram != 0 && snapshot_flow >= 0) {
                             int64_t flow_id = snapshot_flow;
-                            flow_t * flow = check_flow(flowlist, flow_id);
-                            int64_t dst_node = flow->dst;
-                            int dst_tor = dst_node / NODES_PER_RACK;
                             buff_node_t * node = malloc(sizeof(buff_node_t));
                             node->val = flow_id;
-                            buffer_put(spine->snapshot_list[dst_tor], node);
+                            buffer_put(spine->snapshot_list[spine_port], node);
                         }
                     }
 
