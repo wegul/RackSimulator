@@ -18,6 +18,8 @@ struct spine {
     buffer_t * send_buffer[NUM_OF_TORS];
     //stats datastructure
     timeseries_t * queue_stat[SPINE_PORT_COUNT];
+    int64_t cache_hits;
+    int64_t cache_misses;
     //memory datastructure
     sram_t * sram;
     dm_sram_t * dm_sram;
@@ -40,6 +42,7 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
 void clean_sram(spine_t);
 void clean_dm_sram(spine_t);
 snapshot_t * snapshot_to_tor(spine_t, int16_t);
+snapshot_t * snapshot_array_spine(spine_t);
 int64_t spine_buffer_bytes(spine_t, int);
 int64_t * linearize_spine_queues(spine_t, int *);
 

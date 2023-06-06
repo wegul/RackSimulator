@@ -15,5 +15,6 @@ typedef struct snapshot {
 } snapshot_t;
 
 snapshot_t * create_snapshot(buffer_t * pkt_buffer, int16_t * pkts_recorded);
+void print_snapshot(snapshot_t * snapshot);
 
 #endif

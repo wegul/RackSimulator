@@ -14,6 +14,9 @@ spine_t create_spine(int16_t spine_index, int32_t sram_size, int16_t init_sram)
         self->snapshot_list[i] = create_buffer(100);
     }
 
+    self->cache_hits = 0;
+    self->cache_misses = 0;
+
     self->sram = create_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
@@ -65,6 +68,7 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
             // If access is successful, pull flow up to SRAM and return while logging cache miss
             if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
                 (*cache_misses)++;
+                spine->cache_misses++;
                 spine->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
                 return move_to_send_buffer(spine, port);
@@ -79,6 +83,7 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
         else {
             // printf("Spine %d Cache Hit Flow %d: %d\n", spine->spine_index, (int) pkt->flow_id, (int) val);
             (*cache_hits)++;
+            spine->cache_hits++;
             return move_to_send_buffer(spine, port);
         }
     }
@@ -181,6 +186,44 @@ snapshot_t * snapshot_to_tor(spine_t spine, int16_t tor_num)
     int16_t pkts_recorded = 0;
     snapshot_t * snapshot = create_snapshot(spine->send_buffer[tor_num], &pkts_recorded);
     return snapshot;
+}
+
+snapshot_t * snapshot_array_spine(spine_t spine) 
+{
+    // Allocate array
+    snapshot_t ** snapshot_array = malloc(sizeof(snapshot_t *) * NUM_OF_RACKS);
+    for (int i = 0; i < NUM_OF_RACKS; i++) {
+        snapshot_array[i] = malloc(sizeof(snapshot_t));
+        for (int j = 0; j < SNAPSHOT_SIZE; j++) {
+            snapshot_array[i]->flow_id[j] = -1;
+        }
+        snapshot_array[i]->time_to_dequeue_from_link = 0;
+    }
+
+    // Populate array
+    int depth = 0;
+    int detected = 1;
+    while (detected) {
+        detected = 0;
+        for (int i = 0; i < NUM_OF_RACKS; i++) {
+            packet_t pkt = NULL;
+            pkt = buffer_peek(spine->pkt_buffer[i], depth);
+            if (pkt != NULL && pkt->control_flag != 1) {
+                int dst_tor = pkt->dst_node / NODES_PER_RACK;
+                // Find where in snapshot to place packet
+                for (int placement = 0; placement < SNAPSHOT_SIZE; placement++) {
+                    if (snapshot_array[dst_tor]->flow_id[placement] == -1) {
+                        detected = 1;
+                        snapshot_array[dst_tor]->flow_id[placement] = pkt->flow_id;
+                        break;
+                    }
+                }
+            }
+        }
+        depth++;
+    }
+
+    return snapshot_array;
 }
 
 int64_t spine_buffer_bytes(spine_t spine, int port)

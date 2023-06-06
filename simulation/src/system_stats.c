@@ -5,6 +5,7 @@ void print_system_stats(spine_t * spines, tor_t * tors, int64_t total_bytes, int
     //print_tor_stats(tors);
     print_network_tput(total_bytes, total_pkts, ns);
     print_cache_stats(cache_misses, cache_hits);
+    print_per_cache_stats(spines, tors);
     print_delay_stats(avg_delay_at_spine, avg_max_delay_at_spine, timeslot_len);
 }
 
@@ -23,6 +24,19 @@ void print_cache_stats(int64_t cache_misses, int64_t cache_hits) {
     }
 }
     
+void print_per_cache_stats(spine_t * spines, tor_t * tors) {
+    printf("Per-Spine SRAM cache misses: [%ld", spines[0]->cache_misses);
+    for(int i = 1; i < NUM_OF_SPINES; i++) {
+        printf(", %ld", spines[i]->cache_misses);
+    }
+    printf("]\n");
+    printf("Per-ToR SRAM cache misses: [%ld", tors[0]->cache_misses);
+    for(int i = 1; i < NUM_OF_RACKS; i++) {
+        printf(", %ld", tors[i]->cache_misses);
+    }
+    printf("]\n");
+}
+
 void print_spine_stats(spine_t * spines) {
     for (int i = 0; i < NUM_OF_SPINES; i++) {
         printf("Max Queue Lens at Spine %d:\n[", i);

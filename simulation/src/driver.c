@@ -35,8 +35,6 @@ int incast_period; // Period of an incast burst
 double load = 1.0; // Network load 
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
-int64_t spine_cache_misses = 0;
-int64_t spine_cache_hits = 0;
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
 float avg_delay_at_spine = 0;
@@ -162,17 +160,31 @@ void work_per_timeslot()
                 timeseries_add(spine->queue_stat[j], size);
             }
 
+// #ifdef ENABLE_SNAPSHOTS
+//             // Create snapshots array
+//             snapshot_t ** snapshot_array;            
+//             if (curr_timeslot % snapshot_epoch == 0) {
+//                 snapshot_array = snapshot_array_spine(spine);
+//             }
+// #endif
+
             for (int k = 0; k < SPINE_PORT_COUNT; ++k) {
                 //send snapshots every snapshot_epoch
 #ifdef ENABLE_SNAPSHOTS
                 if (curr_timeslot % snapshot_epoch == 0) {
                     snapshot_t * snapshot = snapshot_to_tor(spine, k);
+                    //snapshot_t * snapshot = snapshot_array[k];
                     if (snapshot != NULL) {
-                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                        ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
+                        if (snapshot->flow_id[0] != -1) {
+                            snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                            ipg_send(links->spine_to_tor_link[spine_index][k], snapshot);
 #ifdef DEBUG_SNAPSHOTS
-                        printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
+                            printf("%d: spine %d sent snapshot to ToR %d\n", (int) curr_timeslot, i, k);
 #endif
+                        }
+                        else {
+                            free(snapshot);
+                        }
                     }
                 }
 #endif
@@ -206,6 +218,9 @@ void work_per_timeslot()
                     }
                 }
             }
+// #ifdef ENABLE_SNAPSHOTS
+//             free(snapshot_array);
+// #endif
         }
 
 /*---------------------------------------------------------------------------*/
@@ -645,19 +660,32 @@ void work_per_timeslot()
                 timeseries_add(tor->downstream_queue_stat[j], size);
             }
 
+// #ifdef ENABLE_SNAPSHOTS
+//             // Create snapshot array
+//             snapshot_t ** snapshot_array;
+//             if (curr_timeslot % snapshot_epoch == 0) {
+//                 snapshot_array = snapshot_array_tor(tor);
+//             }
+// #endif
+
             //send to each spine
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
 #ifdef ENABLE_SNAPSHOTS
                 //send snapshots every snapshot_epoch
                 if (curr_timeslot % snapshot_epoch == 0) {
                     snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
+                    //snapshot_t * snapshot = snapshot_array[tor_port];
                     if (snapshot != NULL) {
-                        snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                        ipg_send(links->tor_to_spine_link[tor_index][tor_port], snapshot);
+                        if (snapshot->flow_id[0] != -1) {
+                            snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                            ipg_send(links->tor_to_spine_link[tor_index][tor_port], snapshot);
 #ifdef DEBUG_SNAPSHOTS
-                        printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
+                            printf("%d: ToR %d sent snapshot to spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
-
+                        }
+                        else {
+                            free(snapshot);
+                        }
                     }
                 }
 #endif
@@ -668,6 +696,7 @@ void work_per_timeslot()
                     packet_t pkt = NULL;
                     pkt = (packet_t) buffer_get(tor->upstream_send_buffer[tor_port]);
                     if (pkt != NULL) {
+                        pkt->snapshotted = 0;
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots; 
                         link_enqueue(links->tor_to_spine_link[tor_index][tor_port], pkt);
 #ifdef DEBUG_DRIVER
@@ -682,6 +711,9 @@ void work_per_timeslot()
                 }
 
             }
+// #ifdef ENABLE_SNAPSHOTS
+//             free(snapshot_array);
+// #endif
 
             //send to each host
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
@@ -886,8 +918,8 @@ void work_per_timeslot()
 
                 if (q_len > 0) {
                     belady(spine->sram, spine->dram, lin_queue, q_len);
-                    free(lin_queue);
                 }
+                free(lin_queue);
             }
             spine->access_on_this_timeslot = 0;
 #endif

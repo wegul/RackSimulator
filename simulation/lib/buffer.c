@@ -71,10 +71,11 @@ void * buffer_get(buffer_t * self) {
 }
 
 void * buffer_peek(buffer_t * self, int32_t index) {
-    void * element = NULL;
-    if (self != NULL && self->num_elements > index) {
-        element = self->buffer[index];
+    if (self != NULL && self->num_elements <= index) {
+        return NULL;
     }
+    void * element = NULL;
+    element = self->buffer[index];
     return element;
 }
 

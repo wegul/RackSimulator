@@ -10,23 +10,25 @@ done
 make clean
 make all
 
-bin/driver -f $filename -a 1 -u $burst -s 5000
-bin/driver -f $filename -a 1 -u $burst -s 4000
-bin/driver -f $filename -a 1 -u $burst -s 3000
-bin/driver -f $filename -a 1 -u $burst -s 2000
-bin/driver -f $filename -a 1 -u $burst -s 1000
-bin/driver -f $filename -a 1 -u $burst -s 500
-bin/driver -f $filename -a 1 -u $burst -s 250
-bin/driver -f $filename -a 1 -u $burst -s 100
+bin/driver -f $filename -a 1 -u $burst -s 10
+bin/driver -f $filename -a 1 -u $burst -s 9
+bin/driver -f $filename -a 1 -u $burst -s 8
+bin/driver -f $filename -a 1 -u $burst -s 7
+bin/driver -f $filename -a 1 -u $burst -s 6
+bin/driver -f $filename -a 1 -u $burst -s 5
+bin/driver -f $filename -a 1 -u $burst -s 4
+bin/driver -f $filename -a 1 -u $burst -s 3
+bin/driver -f $filename -a 1 -u $burst -s 2
 
 make clean
 make INCLUDE_SNAPSHOTS='"TRUE"'
 
-bin/driver -f $filename -a 1 -u $burst -s 5000
-bin/driver -f $filename -a 1 -u $burst -s 4000
-bin/driver -f $filename -a 1 -u $burst -s 3000
-bin/driver -f $filename -a 1 -u $burst -s 2000
-bin/driver -f $filename -a 1 -u $burst -s 1000
-bin/driver -f $filename -a 1 -u $burst -s 500
-bin/driver -f $filename -a 1 -u $burst -s 250
-bin/driver -f $filename -a 1 -u $burst -s 100
+bin/driver -f $filename -a 1 -u $burst -s 10
+bin/driver -f $filename -a 1 -u $burst -s 9
+bin/driver -f $filename -a 1 -u $burst -s 8
+bin/driver -f $filename -a 1 -u $burst -s 7
+bin/driver -f $filename -a 1 -u $burst -s 6
+bin/driver -f $filename -a 1 -u $burst -s 5
+bin/driver -f $filename -a 1 -u $burst -s 4
+bin/driver -f $filename -a 1 -u $burst -s 3
+bin/driver -f $filename -a 1 -u $burst -s 2

@@ -8,20 +8,23 @@ tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
     self->tor_index = tor_index;
 
     for (int i = 0; i < NODES_PER_RACK; ++i) {
-        self->downstream_pkt_buffer[i]
-            = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN);
+        self->downstream_pkt_buffer[i] = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN);
+        self->upstream_send_buffer[i] = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
         self->downstream_queue_stat[i] = create_timeseries();
         self->downstream_snapshot_list[i] = create_buffer(100);
     }
 
     for (int i = 0; i < NUM_OF_SPINES; ++i) {
-        self->upstream_pkt_buffer[i]
-            = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
+        self->upstream_pkt_buffer[i] = create_buffer(TOR_UPSTREAM_BUFFER_LEN);
+        self->downstream_send_buffer[i] = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN);
         self->upstream_queue_stat[i] = create_timeseries();
         self->upstream_snapshot_list[i] = create_buffer(100);
     }
     
     create_routing_table(self->routing_table);
+
+    self->cache_hits = 0;
+    self->cache_misses = 0;
 
     self->sram = create_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
@@ -81,6 +84,7 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
             // If access is successful, pull flow up to SRAM and return while logging cache miss
             if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
                 (*cache_misses)++;
+                tor->cache_misses++;
                 tor->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
                 return move_to_up_send_buffer(tor, port);
@@ -95,6 +99,7 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
         else {
             // printf("ToR %d Cache Hit Flow %d\n", tor->tor_index, (int) pkt->flow_id, (int) val);
             (*cache_hits)++;
+            tor->cache_hits++;
             return move_to_up_send_buffer(tor, port);
         }
     }
@@ -200,6 +205,7 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
             // If access is successful, pull flow up to SRAM and return while logging cache miss
             if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
                 (*cache_misses)++;
+                tor->cache_misses++;
                 tor->dram->accessible[pkt->flow_id] = 0;
                 pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
                 return move_to_down_send_buffer(tor, port);
@@ -213,6 +219,7 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
         // Cache hit
         else {
             (*cache_hits)++;
+            tor->cache_hits++;
             return move_to_down_send_buffer(tor, port);
         }
     }
@@ -284,6 +291,44 @@ snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
     int16_t pkts_recorded = 0;
     snapshot_t * snapshot = create_snapshot(tor->upstream_send_buffer[spine_id], &pkts_recorded);
     return snapshot;
+}
+
+snapshot_t * snapshot_array_tor(tor_t tor) 
+{
+    // Allocate array
+    snapshot_t ** snapshot_array = malloc(sizeof(snapshot_t *) * NUM_OF_SPINES);
+    for (int i = 0; i < NUM_OF_SPINES; i++) {
+        snapshot_array[i] = malloc(sizeof(snapshot_t));
+        for (int j = 0; j < SNAPSHOT_SIZE; j++) {
+            snapshot_array[i]->flow_id[j] = -1;
+        }
+        snapshot_array[i]->time_to_dequeue_from_link = 0;
+    }
+
+    // Populate array
+    int depth = 0;
+    int detected = 1;
+    while (detected) {
+        detected = 0;
+        for (int i = 0; i < NODES_PER_RACK; i++) {
+            packet_t pkt = NULL;
+            pkt = buffer_peek(tor->upstream_pkt_buffer[i], depth);
+            if (pkt != NULL) {
+                int dst_spine = hash(tor->routing_table, pkt->flow_id);
+                // Find where in snapshot to place packet
+                for (int placement = 0; placement < SNAPSHOT_SIZE; placement++) {
+                    if (snapshot_array[dst_spine]->flow_id[placement] == -1) {
+                        detected = 1;
+                        snapshot_array[dst_spine]->flow_id[placement] = pkt->flow_id;
+                        break;
+                    }
+                }
+            }
+        }
+        depth++;
+    }
+
+    return snapshot_array;
 }
 
 int64_t tor_up_buffer_bytes(tor_t tor, int port)

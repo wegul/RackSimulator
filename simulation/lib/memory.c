@@ -248,7 +248,6 @@ void print_dm_sram(dm_sram_t * sram) {
 }
 
 int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len) {
-    //printf("here\n");
     if (q_len > 0) {
         for (int j = 0; j < q_len; j++) {
             int64_t id = lin_queue[j];
