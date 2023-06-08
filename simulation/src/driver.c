@@ -7,7 +7,8 @@ static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
 #ifdef ENABLE_SNAPSHOTS
 static int snapshot_epoch = 1; //timeslots between snapshots
-static int belady_epoch = 10;
+static int belady_epoch = 1;
+static int belady_accesses = 1;
 #endif
 
 int16_t header_overhead = 64;
@@ -30,8 +31,6 @@ int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst
 int incast_active = 0; // Number of flows actively sending incast packets. Remaining nodes are reserved for switching
 int incast_switch = 1; // Number of flows that switch flows for each incast period
 int incast_size = 1; // Number of timeslots to send incast packets
-int incast_pause = 1; // Number of timeslots to wait for buffers to drain
-int incast_period; // Period of an incast burst
 double load = 1.0; // Network load 
 int64_t cache_misses = 0;
 int64_t cache_hits = 0;
@@ -54,7 +53,8 @@ int64_t num_of_flows_to_finish = 50000; //stop after these many flows finish
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 50000; //stop after these many flows start
 
-volatile int64_t max_timeslots = 5000; // extern var
+volatile int64_t max_timeslots = 10000; // extern var
+volatile int64_t max_cache_accesses = 200000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -115,7 +115,7 @@ void work_per_timeslot()
                 int64_t misses_before = cache_misses;
                 process_packets(spine, j, &cache_misses, &cache_hits);
                 if (misses_before != cache_misses) {
-                    spine->access_on_this_timeslot = 1;    
+                    spine->access_on_this_timeslot++;    
                 }
             }
         }
@@ -130,10 +130,11 @@ void work_per_timeslot()
             // Process packets on upstream pipelines
             for (int j = 0; j < NODES_PER_RACK; j++) {
                 int64_t misses_before = cache_misses;
-                process_packets_up(tor, j, &cache_misses, &cache_hits);
-                if (misses_before != cache_misses) {
-                    tor->access_on_this_timeslot = 1;
-                }
+                //process_packets_up(tor, j, &cache_misses, &cache_hits);
+                move_to_up_send_buffer(tor, j);
+                // if (misses_before != cache_misses) {
+                //     tor->access_on_this_timeslot++;
+                // }
             }
 
             // Process packets on downstream pipelines
@@ -141,7 +142,7 @@ void work_per_timeslot()
                 int64_t misses_before = cache_misses;
                 process_packets_down(tor, j, &cache_misses, &cache_hits);
                 if (misses_before != cache_misses) {
-                    tor->access_on_this_timeslot = 1;
+                    tor->access_on_this_timeslot++;;
                 }
             }
         }
@@ -226,19 +227,11 @@ void work_per_timeslot()
 /*---------------------------------------------------------------------------*/
                                   //HOST -- SEND
 /*---------------------------------------------------------------------------*/
-        
-        int16_t nodes_to_switch[incast_switch];
-        if (packet_mode == 2) {
-            for (int i = 0; i < incast_switch; i++) {
-                nodes_to_switch[i] = rand() % NUM_OF_NODES;
-            }
-        }
 
         if (packet_mode == 1 && incast_sent_on_period <= incast_size) {
             incast_sent_on_period++;
         }
 
-        //if (packet_mode == 1 && curr_timeslot % incast_period == 0) {
         if (packet_mode == 1 && new_period == 1) {
             shuffle(incast_active_senders, incast_active);
             shuffle(incast_inactive_senders, NUM_OF_NODES - incast_active - 1);
@@ -400,7 +393,6 @@ void work_per_timeslot()
             else if (packet_mode == 1 && i != NUM_OF_NODES - 1) {
                 flow_t * flow = NULL;
                 // Assign new flows
-                //if (curr_timeslot % incast_period == 0) {
                 if (new_period == 1) {
                     // Determine if flow was active last timeslot
                     int was_active = 0;
@@ -467,119 +459,7 @@ void work_per_timeslot()
                 }
                 flow = node->current_flow;
                 // Sending Period
-                //if ((curr_timeslot % incast_period) < incast_size) {
                 if (incast_sent_on_period <= incast_size) {
-                    // Send packets from currently selected flows
-                    if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
-                        int src_node = flow->src;
-                        int dst_node = flow->dst;
-                        int64_t flow_id = flow->flow_id;
-
-                        // Send packets from flow until cwnd is reached or the flow runs out of bytes to send
-                        int64_t flow_bytes_remaining = flow->flow_size_bytes - flow->bytes_sent;
-                        //int64_t cwnd_bytes_remaining = node->cwnd[dst_node] * MTU - (node->seq_num[flow_id] - node->last_acked[flow_id]);
-                        //if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0) {
-                        if (flow_bytes_remaining > 0) {
-                            // Determine packet sizee
-                            int64_t size = MTU;
-                            //if (cwnd_bytes_remaining < MTU) {
-                            //    size = cwnd_bytes_remaining;
-                            //}
-                            if (flow_bytes_remaining < size) {
-                                size = flow_bytes_remaining;
-                            }
-                            assert(size > 0);
-
-                            // Create packet
-                            packet_t pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter);
-                            packet_counter++;
-                            node->seq_num[dst_node] += size;
-                            
-                            // Send packet
-                            pkt->time_when_transmitted_from_src = curr_timeslot;
-                            int dst_tor = node_index / NODES_PER_RACK;
-                            pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
-                            link_enqueue(links->host_to_tor_link[node_index][dst_tor], pkt);
-#ifdef DEBUG_DRIVER
-                            printf("%d: host %d created and sent pkt to ToR %d\n", (int) curr_timeslot, i, (int) dst_tor);
-#endif
-
-                            // Update flow state
-                            if (flow->active == 0) {
-                                flowlist->active_flows++;
-                                flow->start_timeslot = curr_timeslot;
-                                total_flows_started++;
-                            }
-                            flow->active = 1;
-                            flow->pkts_sent++;
-                            flow->bytes_sent += size;
-                            flow->timeslots_active++;
-                            // Determine if last packet of flow has been sent
-                            if (flow->pkts_sent >= flow->flow_size) {
-                                flow->active = 0;
-                                flowlist->active_flows--;
-                            }
-                        }
-                    }
-                }
-                // Recovery Period: send nothing
-                //else {
-                //}    
-            }
-            // Burst Packets mode
-            else if (packet_mode == 2) {
-                flow_t * flow = NULL;
-                // Assign new flows
-                if (curr_timeslot % incast_period == 0) {
-                    // If node is selected to change flows, switch to new flow
-                    for (int j = 0; j < incast_switch; j++) {
-                        if ((curr_timeslot == 0 && j == 0) || node_index == nodes_to_switch[j]) {
-                            if (node->current_flow != NULL) {
-#ifdef DEBUG_DRIVER
-                                printf("%d: Node %d returned flow %d\n", (int) curr_timeslot, (int) node_index, (int) node->current_flow->flow_id);
-#endif
-                                buffer_put(node->active_flows, node->current_flow);
-                                node->current_flow = NULL;
-                            }
-                            // Randomly select new flow to start
-                            int32_t num_af = node->active_flows->num_elements;
-                            int32_t selected = (int32_t) rand() % num_af;
-                            flow = buffer_remove(node->active_flows, selected);
-                            // If flow is not yet active, return it to the flow list
-                            if (flow == NULL || (flow->active == 0 && flow->timeslot > curr_timeslot)) {
-                                buffer_put(node->active_flows, flow);
-                                flow = NULL;
-#ifdef DEBUG_DRIVER
-                                printf("%d: Node %d attempted burst on unviable flow\n", (int) curr_timeslot, (int) node_index);
-#endif                        
-                            }
-                            else {
-                                node->current_flow = flow;
-                                // Ensure initial flows exist in memory already so as to not flood start of simulation with cache misses
-                                if (curr_timeslot == 0) {
-                                    for (int k = 0; k < NUM_OF_SPINES; k++) {
-                                        //printf("attempting to pull flow %d for spine %d\n", flow->flow_id, k);
-                                        spine_t spine = spines[k];
-                                        if (fully_associative) {
-                                            pull_from_dram(spine->sram, spine->dram, flow->flow_id);
-                                        }
-                                        else {
-                                            dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
-                                        }
-                                        
-                                    }
-
-                                }
-#ifdef DEBUG_DRIVER
-                                printf("%d: Node %d has started flow %d\n", (int) curr_timeslot, (int) node_index, (int) flow->flow_id);
-#endif
-                            }
-                        }
-                    }
-                }
-                flow = node->current_flow;
-                // Sending Period
-                if ((curr_timeslot % incast_period) < incast_size) {
                     // Send packets from currently selected flows
                     if (flow != NULL && (flow->active == 1 || flow->timeslot <= curr_timeslot)) {
                         int src_node = flow->src;
@@ -837,12 +717,46 @@ void work_per_timeslot()
             }
             // Prefetch w/ Belady's 
 #ifdef ENABLE_SNAPSHOTS 
-            if (curr_timeslot % belady_epoch == 0 && tor->access_on_this_timeslot == 0) {
+            if (curr_timeslot % belady_epoch == 0 && tor->access_on_this_timeslot < belady_accesses) {
                 int q_len = 0;
                 int64_t * lin_queue = linearize_tor_downstream_queues(tor, &q_len);
 
                 if (q_len > 0) {
-                    belady(tor->sram, tor->dram, lin_queue, q_len);
+                    // // Print out lin queue to ensure it matches switch's queues
+                    // printf("Lin queue for tor %d: [", tor_index);
+                    // for (int p = 0; p < q_len; p++) {
+                    //     printf("%d, ", lin_queue[p]);
+                    // }
+                    // printf("]\n");
+
+                    // // Print out switch's packet queues to ensure they match
+                    // for (int p = 0; p < NUM_OF_SPINES; p++) {
+                    //     int queue_depth = 10;
+                    //     if (tor->downstream_pkt_buffer[p]->num_elements < queue_depth) {
+                    //         queue_depth = tor->downstream_pkt_buffer[p]->num_elements;
+                    //     }
+                    //     printf("Capacity: %d\n", tor->downstream_pkt_buffer[p]->num_elements);
+                    //     printf("Buff %d: [", p);
+                    //     for (int q = 0; q < queue_depth; q++) {
+                    //         packet_t pkt = buffer_peek(tor->downstream_pkt_buffer[p], q);
+                    //         if (pkt != NULL && pkt->control_flag == 0) {
+                    //             printf("%d, ", pkt->flow_id);
+                    //         }
+                    //     }
+                    //     printf("]\n");
+                    // }
+
+                    // // Print switch's current memory before
+                    // printf("Tor SRAM before: ");
+                    // print_sram(tor->sram);
+                                   
+                    for (int a = 0; a < belady_accesses - tor->access_on_this_timeslot; a++) {
+                        belady(tor->sram, tor->dram, lin_queue, q_len);
+                    }
+                    
+                    // printf("Tor SRAM after: ");
+                    // print_sram(tor->sram);
+
                     free(lin_queue);
                 }
             }
@@ -912,12 +826,38 @@ void work_per_timeslot()
             }
             // Prefetch with Belady's
 #ifdef ENABLE_SNAPSHOTS
-            if (curr_timeslot % belady_epoch == 0 && spine->access_on_this_timeslot == 0) {
+            if (curr_timeslot % belady_epoch == 0 && spine->access_on_this_timeslot < belady_accesses) {
                 int q_len = 0;
                 int64_t * lin_queue = linearize_spine_queues(spine, &q_len);
 
                 if (q_len > 0) {
-                    belady(spine->sram, spine->dram, lin_queue, q_len);
+                    // // Print out lin queue to ensure it matches switch's queues
+                    // printf("Lin queue for spine %d: [", spine_index);
+                    // for (int p = 0; p < q_len; p++) {
+                    //     printf("%d, ", lin_queue[p]);
+                    // }
+                    // printf("]\n");
+
+                    // // Print out switch's packet queues to ensure they match
+                    // printf("Spine %d packet buffers:\n", spine_index);
+                    // for (int p = 0; p < NUM_OF_RACKS; p++) {
+                    //     int queue_depth = 10;
+                    //     if (spine->pkt_buffer[p]->num_elements < queue_depth) {
+                    //         queue_depth = spine->pkt_buffer[p]->num_elements;
+                    //     }
+                    //     printf("Capacity: %d\n", spine->pkt_buffer[p]->num_elements);
+                    //     printf("Buff %d: [", p);
+                    //     for (int q = 0; q < queue_depth; q++) {
+                    //         packet_t pkt = buffer_peek(spine->pkt_buffer[p], q);
+                    //         if (pkt != NULL && pkt->control_flag == 0) {
+                    //             printf("%d, ", pkt->flow_id);
+                    //         }
+                    //     }
+                    //     printf("]\n");
+                    // }
+                    for (int a = 0; a < belady_accesses - spine->access_on_this_timeslot; a++) {
+                        belady(spine->sram, spine->dram, lin_queue, q_len);
+                    }
                 }
                 free(lin_queue);
             }
@@ -1000,10 +940,6 @@ void work_per_timeslot()
                  //Data logging
 /*---------------------------------------------------------------------------*/
         // Update avg max timeperiod
-        if (curr_timeslot % incast_period == 0 && curr_timeslot != 0) {
-            avg_max_delay_at_spine = (avg_max_delay_at_spine * (curr_timeslot / incast_period - 1) + max_delay_in_timeperiod) / (curr_timeslot / incast_period);
-            max_delay_in_timeperiod = 0;
-        }
 
 /*---------------------------------------------------------------------------*/
                  //State updates before next iteration
@@ -1038,7 +974,12 @@ void work_per_timeslot()
             terminate3 = 1;
         }
 
-        if (terminate0 || terminate1 || terminate2 || terminate3) {
+        if (cache_hits + cache_misses >= max_cache_accesses) {
+            printf("\nReached %d cache accesses\n\n", (int) max_cache_accesses);
+            terminate4 = 1;
+        }
+
+        if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4) {
             double curr_time = curr_timeslot * timeslot_len / 1e9;
             printf("Finished in %d timeslots\n", (int) curr_timeslot);
             printf("Finished in %f seconds\n", curr_time);
@@ -1083,7 +1024,7 @@ void process_args(int argc, char ** argv) {
     char timeseries_filename[515] = "";
     char timeseries_suffix[15] = ".timeseries.csv";
 
-    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:i:e:s:u:l:p:k:v:x:y:z:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:b:c:h:d:n:m:t:q:a:e:s:i:u:l:p:k:v:x:y:z:")) != -1) {
         switch(opt) {
             case 'c': 
                 pkt_size = atoi(optarg);
@@ -1125,6 +1066,27 @@ void process_args(int argc, char ** argv) {
                     printf("Using fully-associative SRAM\n");
                 }
                 break;
+            case 'e':
+                enable_sram = atoi(optarg);
+                if (enable_sram == 0) {
+                    printf("SRAM is disabled\n");
+                }
+                else {
+                    printf("SRAM is enabled\n");
+                }
+                break;
+            case 's':
+                sram_size = atoi(optarg);
+                printf("Utilizing SRAM size of %d\n", (int) sram_size);
+                for (int i = 0; i < NUM_OF_SPINES; i++) {
+                    spines[i]->sram->capacity = sram_size;
+                    spines[i]->dm_sram->capacity = sram_size;
+                }
+                for (int i = 0; i < NUM_OF_RACKS; i++) {
+                    tors[i]->sram->capacity = sram_size;
+                    tors[i]->dm_sram->capacity = sram_size;
+                }
+                break;
             case 'i':
                 init_sram = atoi(optarg);
                 if (init_sram == 1) {
@@ -1138,19 +1100,6 @@ void process_args(int argc, char ** argv) {
                         initialize_dm_sram(tors[i]->dm_sram);
                     }
                 }
-                break;
-            case 'e':
-                enable_sram = atoi(optarg);
-                if (enable_sram == 0) {
-                    printf("SRAM is disabled\n");
-                }
-                else {
-                    printf("SRAM is enabled\n");
-                }
-                break;
-            case 's':
-                sram_size = atoi(optarg);
-                printf("Utilizing SRAM size of %d\n", (int) sram_size);
                 break;
             case 'u':
                 burst_size = atoi(optarg);
@@ -1183,11 +1132,6 @@ void process_args(int argc, char ** argv) {
                 incast_size = atoi(optarg);
                 printf("Incast duration of %d packets\n", incast_size);
                 break;
-            case 'z':
-                packet_mode = 1;
-                incast_pause = atoi(optarg);
-                printf("Incast pause of %d timeslots\n", incast_pause);
-                break;
             case 'f': 
                 if (strlen(optarg) < 500) {
                     strcpy(filename, optarg);
@@ -1208,9 +1152,6 @@ void process_args(int argc, char ** argv) {
                 exit(1);
         }
     }
-
-    incast_period = incast_size + incast_pause;
-    printf("Incast period duration: %d\n", incast_period);
 
     timeslot_len = (pkt_size * 8) / link_bandwidth;
     printf("Running with a slot length of %fns\n", timeslot_len);
@@ -1242,15 +1183,10 @@ void process_args(int argc, char ** argv) {
 
     read_tracefile(filename);
     for (int i = 0; i < NUM_OF_SPINES; i++) {
-        spines[i]->sram->capacity = sram_size;
-        spines[i]->dm_sram->capacity = sram_size;
         spines[i]->dram->delay = timeslots_per_dram_access;
-        //spines[i]->dram->accesses = accesses_per_timeslot;
         spines[i]->dram->accesses = timeslot_len;
     }
     for (int i = 0; i < NUM_OF_RACKS; i++) {
-        tors[i]->sram->capacity = sram_size;
-        tors[i]->dm_sram->capacity = sram_size;
         tors[i]->dram->delay = timeslots_per_dram_access;
         spines[i]->dram->accesses = timeslot_len;
     }
@@ -1318,7 +1254,7 @@ void initialize_network() {
     tors = (tor_t*) malloc(NUM_OF_TORS * sizeof(tor_t));
     MALLOC_TEST(tors, __LINE__);
     for (int i = 0; i < NUM_OF_TORS; ++i) {
-        tors[i] = create_tor(i, sram_size, init_sram);
+        tors[i] = create_tor(i, sram_size, 0);
     }
     printf("ToRs initialized\n");
 
@@ -1326,7 +1262,7 @@ void initialize_network() {
     spines = (spine_t*) malloc(NUM_OF_SPINES * sizeof(spine_t));
     MALLOC_TEST(spines, __LINE__);
     for (int i = 0; i < NUM_OF_SPINES; ++i) {
-        spines[i] = create_spine(i, sram_size, init_sram);
+        spines[i] = create_spine(i, sram_size, 0);
     }
     printf("Spines initialized\n");
 

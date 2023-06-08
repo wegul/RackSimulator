@@ -2,6 +2,8 @@
 simulation/bin
 simulation/obj
 simulation/out
+simulation/old_experiments
+simulation/old_traces
 simulation/trace*
 simulation/max*
 simulation/experiment*

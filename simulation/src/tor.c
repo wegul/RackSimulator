@@ -113,19 +113,22 @@ packet_t move_to_up_send_buffer(tor_t tor, int16_t port) {
     pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[port]);
 
     // Remove entry from snapshot list (if present)
-    if (tor->upstream_snapshot_list[port]->num_elements > 0) {
-        int64_t id = pkt->flow_id;
+    if (pkt != NULL) {
+        if (tor->upstream_snapshot_list[port]->num_elements > 0) {
+            int64_t id = pkt->flow_id;
 
-        buff_node_t * first = buffer_peek(tor->upstream_snapshot_list[port], 0);
-        if (first->val == id) {
-            first = buffer_get(tor->upstream_snapshot_list[port]);
-            free(first);
+            buff_node_t * first = buffer_peek(tor->upstream_snapshot_list[port], 0);
+            if (first->val == id) {
+                first = buffer_get(tor->upstream_snapshot_list[port]);
+                free(first);
+            }
         }
-    }
 
-    // Move packet to send buffer
-    int dst_spine = hash(tor->routing_table, pkt->flow_id);
-    assert(buffer_put(tor->upstream_send_buffer[dst_spine], pkt) != -1);
+        // Move packet to send buffer
+        int dst_spine = hash(tor->routing_table, pkt->flow_id);
+        assert(buffer_put(tor->upstream_send_buffer[dst_spine], pkt) != -1);
+    }
+    
     return pkt;
 }
 
@@ -162,7 +165,7 @@ packet_t send_to_spine_dm(tor_t tor, int16_t spine_id, int64_t * cache_misses, i
 }
 
 packet_t send_to_spine_dram_only(tor_t tor, int16_t spine_id, int64_t * cache_misses) {
-    // Grab the top packeet in the virtual queue if a DRAM request was given last timeslot
+    // Grab the top packet in the virtual queue if a DRAM request was given last timeslot
     packet_t pkt = NULL;
 
     pkt = (packet_t) buffer_peek(tor->upstream_pkt_buffer[spine_id], 0);

@@ -5,34 +5,31 @@ do
         v) active=${OPTARG};;
         x) change=${OPTARG};;
         y) duration=${OPTARG};;
-        z) pause=${OPTARG};;
     esac
 done
 
 make clean
 make all
 
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 80
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 72
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 64
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 56
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 48
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 40
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 32
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 24
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 16
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 8
+bin/driver -f $filename -a 1 -s 144 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 128 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 112 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 96 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 80 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 64 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 48 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 32 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 16 -i 1 -v $active -x $change -y $duration
 
 make clean
 make INCLUDE_SNAPSHOTS='"TRUE"'
 
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 80
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 72
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 64
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 56
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 48
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 40
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 32
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 24
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 16
-bin/driver -f $filename -a 1 -v $active -x $change -y $duration -z $pause -s 8
+bin/driver -f $filename -a 1 -s 144 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 128 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 112 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 96 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 80 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 64 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 48 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 32 -i 1 -v $active -x $change -y $duration
+bin/driver -f $filename -a 1 -s 16 -i 1 -v $active -x $change -y $duration
