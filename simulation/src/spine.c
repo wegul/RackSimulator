@@ -61,23 +61,35 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
             assert(buffer_put(spine->send_buffer[dst_tor], pkt) != -1);
             return process_packets(spine, port, cache_misses, cache_hits);
         }
+        // Determine if flow id is in SRAM
         int64_t val = access_sram(spine->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-            // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
-            // If access is successful, pull flow up to SRAM and return while logging cache miss
-            if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
+            // Memory is not locked, can begin DRAM access on this timeslot
+            if (spine->dram->lock == 0) { 
                 (*cache_misses)++;
                 spine->cache_misses++;
-                spine->dram->accessible[pkt->flow_id] = 0;
-                pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
-                return move_to_send_buffer(spine, port);
+
+                spine->dram->lock = 1;
+                spine->dram->accessing = pkt->flow_id;
+                spine->dram->placement_idx = 0;
             }
-            // Otherwise, continue trying to access and return NULL
-            else {
-                spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
-                return NULL;
-            }
+
+            // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
+            // If access is successful, pull flow up to SRAM and return while logging cache miss
+            // if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
+            //     (*cache_misses)++;
+            //     spine->cache_misses++;
+            //     spine->dram->accessible[pkt->flow_id] = 0;
+            //     pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
+            //     return move_to_send_buffer(spine, port);
+            // }
+            // // Otherwise, continue trying to access and return NULL
+            // else {
+            //     // Change back after done collecting 0-time packet traces
+            //     spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
+            //     return NULL;
+            // }
         }
         // Cache hit
         else {

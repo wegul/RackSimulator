@@ -7,3 +7,5 @@ simulation/old_traces
 simulation/trace*
 simulation/max*
 simulation/experiment*
+simulation/best_case_*
+simulation/balanced_case_*

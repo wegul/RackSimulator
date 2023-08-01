@@ -6,7 +6,7 @@ static float link_bandwidth = 100; //in Gbps
 static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
 #ifdef ENABLE_SNAPSHOTS
-static int snapshot_epoch = 1; //timeslots between snapshots
+static int snapshot_epoch = 9; //timeslots between snapshots
 static int belady_epoch = 1;
 static int belady_accesses = 1;
 #endif
@@ -40,12 +40,14 @@ float avg_delay_at_spine = 0;
 float avg_max_delay_at_spine = 0;
 int max_delay_in_timeperiod = 0;
 int64_t pkt_delays_recorded = 0;
+float avg_flow_completion_time = 0;
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
 static volatile int8_t terminate2 = 0;
 static volatile int8_t terminate3 = 0;
 static volatile int8_t terminate4 = 0;
+static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
 int64_t num_of_flows_to_finish = 50000; //stop after these many flows finish
@@ -53,8 +55,9 @@ int64_t num_of_flows_to_finish = 50000; //stop after these many flows finish
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 50000; //stop after these many flows start
 
-volatile int64_t max_timeslots = 10000; // extern var
+volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
+volatile int64_t max_bytes_rcvd = 10000000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -86,6 +89,49 @@ void work_per_timeslot()
     }
     while (1) {
 /*---------------------------------------------------------------------------*/
+                                  //Update memory
+/*---------------------------------------------------------------------------*/
+
+        // Update DRAM access counters
+        // Spines
+        for (int i = 0; i < NUM_OF_SPINES; i++) {
+            spine_t spine = spines[i];
+
+            if (spine->dram->lock > 0) {
+                spine->dram->lock++;
+
+                if (spine->dram->lock > spine->dram->delay) {
+                    pull_from_dram(spine->sram, spine->dram, spine->dram->accessing);
+                    //printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
+
+                    // Reset DRAM lock
+                    spine->dram->lock = 0;
+                    spine->dram->accessing = -1;
+                    spine->dram->placement_idx = 0;
+                }
+            }
+        }
+
+        // ToRs
+        for (int i = 0; i < NUM_OF_RACKS; i++) {
+            tor_t tor = tors[i];
+
+            if (tor->dram->lock > 0) {
+                tor->dram->lock++;
+
+                if (tor->dram->lock > tor->dram->delay) {
+                    pull_from_dram(tor->sram, tor->dram, tor->dram->accessing);
+                    //printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
+
+                    // Reset DRAM lock
+                    tor->dram->lock = 0;
+                    tor->dram->accessing = -1;
+                    tor->dram->placement_idx = 0;
+                }
+            }
+        }
+
+/*---------------------------------------------------------------------------*/
                                   //Activate inactive flows
 /*---------------------------------------------------------------------------*/
         for (; flow_idx < flowlist->num_flows; flow_idx++) {
@@ -114,9 +160,6 @@ void work_per_timeslot()
             for (int j = 0; j < SPINE_PORT_COUNT; j++) {
                 int64_t misses_before = cache_misses;
                 process_packets(spine, j, &cache_misses, &cache_hits);
-                if (misses_before != cache_misses) {
-                    spine->access_on_this_timeslot++;    
-                }
             }
         }
 /*---------------------------------------------------------------------------*/
@@ -132,18 +175,12 @@ void work_per_timeslot()
                 int64_t misses_before = cache_misses;
                 //process_packets_up(tor, j, &cache_misses, &cache_hits);
                 move_to_up_send_buffer(tor, j);
-                // if (misses_before != cache_misses) {
-                //     tor->access_on_this_timeslot++;
-                // }
             }
 
             // Process packets on downstream pipelines
             for (int j = 0; j < NUM_OF_SPINES; j++) {
                 int64_t misses_before = cache_misses;
                 process_packets_down(tor, j, &cache_misses, &cache_hits);
-                if (misses_before != cache_misses) {
-                    tor->access_on_this_timeslot++;;
-                }
             }
         }
 
@@ -160,14 +197,6 @@ void work_per_timeslot()
                 int32_t size = spine_buffer_bytes(spine, j);
                 timeseries_add(spine->queue_stat[j], size);
             }
-
-// #ifdef ENABLE_SNAPSHOTS
-//             // Create snapshots array
-//             snapshot_t ** snapshot_array;            
-//             if (curr_timeslot % snapshot_epoch == 0) {
-//                 snapshot_array = snapshot_array_spine(spine);
-//             }
-// #endif
 
             for (int k = 0; k < SPINE_PORT_COUNT; ++k) {
                 //send snapshots every snapshot_epoch
@@ -219,9 +248,6 @@ void work_per_timeslot()
                     }
                 }
             }
-// #ifdef ENABLE_SNAPSHOTS
-//             free(snapshot_array);
-// #endif
         }
 
 /*---------------------------------------------------------------------------*/
@@ -540,21 +566,12 @@ void work_per_timeslot()
                 timeseries_add(tor->downstream_queue_stat[j], size);
             }
 
-// #ifdef ENABLE_SNAPSHOTS
-//             // Create snapshot array
-//             snapshot_t ** snapshot_array;
-//             if (curr_timeslot % snapshot_epoch == 0) {
-//                 snapshot_array = snapshot_array_tor(tor);
-//             }
-// #endif
-
             //send to each spine
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_UP; ++tor_port) {
 #ifdef ENABLE_SNAPSHOTS
                 //send snapshots every snapshot_epoch
                 if (curr_timeslot % snapshot_epoch == 0) {
                     snapshot_t * snapshot = snapshot_to_spine(tor, tor_port);
-                    //snapshot_t * snapshot = snapshot_array[tor_port];
                     if (snapshot != NULL) {
                         if (snapshot->flow_id[0] != -1) {
                             snapshot->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
@@ -591,14 +608,11 @@ void work_per_timeslot()
                 }
 
             }
-// #ifdef ENABLE_SNAPSHOTS
-//             free(snapshot_array);
-// #endif
 
             //send to each host
             for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port) {
                 if (i == 8 && tor_port == 8) {
-                    if (incast_buffer_len > 0 && tor->downstream_pkt_buffer[tor_port]->num_elements == 0) {
+                    if (incast_buffer_len >= 0 && tor->downstream_pkt_buffer[tor_port]->num_elements == 0) {
                         incast_sent_on_period = 0;
                         new_period = 1;
                     }
@@ -659,7 +673,9 @@ void work_per_timeslot()
                         printf("%d: Tor %d recv pkt from host %d\n", (int) curr_timeslot, i, src_host);
 #endif
 #ifdef RECORD_PACKETS
-                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, up\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
+                        if (pkt->control_flag == 0) {
+                            fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, %d, up\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot), (int) pkt->time_when_transmitted_from_src);
+                        }
 #endif
                         bytes_rcvd += pkt->size;
                     }
@@ -689,7 +705,9 @@ void work_per_timeslot()
                         printf("%d: Tor %d recv pkt from spine %d\n", (int) curr_timeslot, i, tor_port);
 #endif
 #ifdef RECORD_PACKETS
-                        fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, down\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot * timeslot_len));
+                        if (pkt->control_flag == 0) {
+                            fprintf(tor_outfiles[i], "%d, %d, %d, %d, %d, %d, down\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) tor_port, (int) (curr_timeslot), (int) pkt->time_when_transmitted_from_src);
+                        }
 #endif
                         bytes_rcvd += pkt->size;
                     }
@@ -715,53 +733,6 @@ void work_per_timeslot()
                 }
 #endif
             }
-            // Prefetch w/ Belady's 
-#ifdef ENABLE_SNAPSHOTS 
-            if (curr_timeslot % belady_epoch == 0 && tor->access_on_this_timeslot < belady_accesses) {
-                int q_len = 0;
-                int64_t * lin_queue = linearize_tor_downstream_queues(tor, &q_len);
-
-                if (q_len > 0) {
-                    // // Print out lin queue to ensure it matches switch's queues
-                    // printf("Lin queue for tor %d: [", tor_index);
-                    // for (int p = 0; p < q_len; p++) {
-                    //     printf("%d, ", lin_queue[p]);
-                    // }
-                    // printf("]\n");
-
-                    // // Print out switch's packet queues to ensure they match
-                    // for (int p = 0; p < NUM_OF_SPINES; p++) {
-                    //     int queue_depth = 10;
-                    //     if (tor->downstream_pkt_buffer[p]->num_elements < queue_depth) {
-                    //         queue_depth = tor->downstream_pkt_buffer[p]->num_elements;
-                    //     }
-                    //     printf("Capacity: %d\n", tor->downstream_pkt_buffer[p]->num_elements);
-                    //     printf("Buff %d: [", p);
-                    //     for (int q = 0; q < queue_depth; q++) {
-                    //         packet_t pkt = buffer_peek(tor->downstream_pkt_buffer[p], q);
-                    //         if (pkt != NULL && pkt->control_flag == 0) {
-                    //             printf("%d, ", pkt->flow_id);
-                    //         }
-                    //     }
-                    //     printf("]\n");
-                    // }
-
-                    // // Print switch's current memory before
-                    // printf("Tor SRAM before: ");
-                    // print_sram(tor->sram);
-                                   
-                    for (int a = 0; a < belady_accesses - tor->access_on_this_timeslot; a++) {
-                        belady(tor->sram, tor->dram, lin_queue, q_len);
-                    }
-                    
-                    // printf("Tor SRAM after: ");
-                    // print_sram(tor->sram);
-
-                    free(lin_queue);
-                }
-            }
-            tor->access_on_this_timeslot = 0;
-#endif
         }
 
 /*---------------------------------------------------------------------------*/
@@ -785,7 +756,9 @@ void work_per_timeslot()
                     printf("%d: Spine %d recv pkt from ToR %d\n", (int) curr_timeslot, spine_index, src_tor);
 #endif
 #ifdef RECORD_PACKETS
-                    fprintf(spine_outfiles[i], "%d, %d, %d, %d, %d\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) spine_port, (int) (curr_timeslot * timeslot_len));
+                    if (pkt->control_flag == 0) {
+                        fprintf(spine_outfiles[i], "%d, %d, %d, %d, %d, %d\n", (int) pkt->flow_id, (int) pkt->src_node, (int) pkt->dst_node, (int) spine_port, (int) curr_timeslot, (int) pkt->time_when_transmitted_from_src);
+                    }
 #endif
                     //enq packet in the virtual queue
                     pkt->time_when_added_to_spine_queue = curr_timeslot;
@@ -824,45 +797,6 @@ void work_per_timeslot()
                 }
 #endif
             }
-            // Prefetch with Belady's
-#ifdef ENABLE_SNAPSHOTS
-            if (curr_timeslot % belady_epoch == 0 && spine->access_on_this_timeslot < belady_accesses) {
-                int q_len = 0;
-                int64_t * lin_queue = linearize_spine_queues(spine, &q_len);
-
-                if (q_len > 0) {
-                    // // Print out lin queue to ensure it matches switch's queues
-                    // printf("Lin queue for spine %d: [", spine_index);
-                    // for (int p = 0; p < q_len; p++) {
-                    //     printf("%d, ", lin_queue[p]);
-                    // }
-                    // printf("]\n");
-
-                    // // Print out switch's packet queues to ensure they match
-                    // printf("Spine %d packet buffers:\n", spine_index);
-                    // for (int p = 0; p < NUM_OF_RACKS; p++) {
-                    //     int queue_depth = 10;
-                    //     if (spine->pkt_buffer[p]->num_elements < queue_depth) {
-                    //         queue_depth = spine->pkt_buffer[p]->num_elements;
-                    //     }
-                    //     printf("Capacity: %d\n", spine->pkt_buffer[p]->num_elements);
-                    //     printf("Buff %d: [", p);
-                    //     for (int q = 0; q < queue_depth; q++) {
-                    //         packet_t pkt = buffer_peek(spine->pkt_buffer[p], q);
-                    //         if (pkt != NULL && pkt->control_flag == 0) {
-                    //             printf("%d, ", pkt->flow_id);
-                    //         }
-                    //     }
-                    //     printf("]\n");
-                    // }
-                    for (int a = 0; a < belady_accesses - spine->access_on_this_timeslot; a++) {
-                        belady(spine->sram, spine->dram, lin_queue, q_len);
-                    }
-                }
-                free(lin_queue);
-            }
-            spine->access_on_this_timeslot = 0;
-#endif
         }
 
 /*---------------------------------------------------------------------------*/
@@ -937,9 +871,78 @@ void work_per_timeslot()
         }
 
 /*---------------------------------------------------------------------------*/
-                 //Data logging
+                 //Prefetch flows with Belady's Algorithm
 /*---------------------------------------------------------------------------*/
-        // Update avg max timeperiod
+        
+#ifdef ENABLE_SNAPSHOTS 
+        if (curr_timeslot % belady_epoch == 0) {
+            for (int i = 0; i < NUM_OF_RACKS; i++) {
+                tor_t tor = tors[i];
+                int q_len = 0;
+                int64_t * lin_queue = linearize_tor_downstream_queues(tor, &q_len);
+
+                if (q_len > 0) {
+                    // Organize SRAM by going through lin_queue backwards, tracking soonest not in SRAM
+                    // This will order SRAM based on how soon the snapshots believe they will arrive at switch
+                    int64_t id_to_fetch = -1;
+                    int placement_index = 0;
+                    for (int j = q_len - 1; j >= 0; j--) {
+                        int64_t id = lin_queue[j];
+                        int index = access_sram_return_index(tor->sram, id);
+                        if (index < 0) {
+                            id_to_fetch = id;
+                            placement_index = 0;
+                        }
+                        else if (index >= placement_index) {
+                            placement_index++;
+                        }
+                    }
+
+                    if (tor->dram->lock == 0 && id_to_fetch >= 0 && placement_index < tor->sram->capacity) {
+                        tor->dram->lock = 1;
+                        tor->dram->accessing = id_to_fetch;
+                        tor->dram->placement_idx = placement_index;
+                        //printf("%d: ToR %d prefetching %d to index %d\n", (int) curr_timeslot, i, id_to_fetch, placement_index);
+                    }
+
+                    free(lin_queue);
+                }
+            }
+            
+            for (int i = 0; i < NUM_OF_SPINES; i++) {
+                spine_t spine = spines[i];
+                int q_len = 0;
+                int64_t * lin_queue = linearize_spine_queues(spine, &q_len);
+
+                if (q_len > 0) {
+                    // Organize SRAM by going through lin_queue backwards, tracking soonest not in SRAM
+                    // This will order SRAM based on how soon the snapshots believe they will arrive at switch
+                    int64_t id_to_fetch = -1;
+                    int placement_index = 0;
+                    for (int j = q_len - 1; j >= 0; j--) {
+                        int64_t id = lin_queue[j];
+                        int index = access_sram_return_index(spine->sram, id);
+                        if (index < 0) {
+                            id_to_fetch = id;
+                            placement_index = 0;
+                        }
+                        else if (index >= placement_index) {
+                            placement_index++;
+                        }
+                    }
+
+                    if (spine->dram->lock == 0 && id_to_fetch >= 0 && placement_index < spine->sram->capacity) {
+                        spine->dram->lock = 1;
+                        spine->dram->accessing = id_to_fetch;
+                        spine->dram->placement_idx = placement_index;
+                        //printf("%d: Spine %d prefetching %d to index %d\n", (int) curr_timeslot, i, id_to_fetch, placement_index);
+                    }
+
+                    free(lin_queue);
+                }
+            }
+        }
+#endif
 
 /*---------------------------------------------------------------------------*/
                  //State updates before next iteration
@@ -959,30 +962,49 @@ void work_per_timeslot()
             }
         }
 
-        if (total_flows_started >= num_of_flows_to_start) {
-            printf("\nStarted %d flows\n\n", (int) total_flows_started);
-            terminate1 = 1;
+        // if (total_flows_started >= num_of_flows_to_start) {
+        //     printf("\nStarted %d flows\n\n", (int) total_flows_started);
+        //     terminate1 = 1;
+        // }
+
+        // if (num_of_flows_finished >= num_of_flows_to_finish) {
+        //     printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
+        //     terminate2 = 1;
+        // }
+
+        // if (curr_timeslot >= max_timeslots) {
+        //     printf("\nReached max timeslot %d\n\n", (int) curr_timeslot);
+        //     terminate3 = 1;
+        // }
+
+        // if (cache_hits + cache_misses >= max_cache_accesses) {
+        //     //printf("\nReached %d cache accesses\n\n", (int) max_cache_accesses);
+        //     terminate4 = 1;
+        // }
+
+        if (total_bytes_rcvd >= max_bytes_rcvd) {
+            printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
+            terminate5 = 1;
         }
 
-        if (num_of_flows_finished >= num_of_flows_to_finish) {
-            printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
-            terminate2 = 1;
-        }
+        if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
+            int completed_flows = 0;
+            for (int i = 0; i < flowlist->num_flows; i++) {
+                if (flowlist->flows[i]->finished > 0) {
+                    avg_flow_completion_time += flowlist->flows[i]->finish_timeslot;
+                    completed_flows++;
+                }
+            }
+            if (completed_flows > 0) {
+                avg_flow_completion_time /= completed_flows;
+            }
+            printf("Avg flow completion time: %d\n", avg_flow_completion_time);
+            printf("Flows completed: %d\n", completed_flows);
 
-        if (curr_timeslot >= max_timeslots) {
-            printf("\nReached max timeslot %d\n\n", (int) curr_timeslot);
-            terminate3 = 1;
-        }
-
-        if (cache_hits + cache_misses >= max_cache_accesses) {
-            printf("\nReached %d cache accesses\n\n", (int) max_cache_accesses);
-            terminate4 = 1;
-        }
-
-        if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4) {
             double curr_time = curr_timeslot * timeslot_len / 1e9;
             printf("Finished in %d timeslots\n", (int) curr_timeslot);
             printf("Finished in %f seconds\n", curr_time);
+            printf("Finished in %d bytes\n", total_bytes_rcvd);
             break;
         }
 
@@ -1007,6 +1029,7 @@ static inline void usage()
 
 void shuffle(int * array, size_t n) {
     if (n > 1) {
+        // Choose 
         for (size_t i = 0; i < n - 1; i++) {
             size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
             int t = array[j];
@@ -1308,7 +1331,7 @@ void open_switch_outfiles(char * base_filename) {
         strncat(filename, spine_id, 5);
         strncat(filename, csv_suffix, 4);
         spine_outfiles[i] = fopen(filename, "w");
-        fprintf(spine_outfiles[i], "flow_id, src, dst, port, arrival_time\n");
+        fprintf(spine_outfiles[i], "flow_id, src, dst, port, arrival_time, creation_time\n");
     }
 
     for (int i = 0; i < NUM_OF_RACKS; i++) {
@@ -1321,7 +1344,7 @@ void open_switch_outfiles(char * base_filename) {
         strncat(filename, tor_id, 5);
         strncat(filename, csv_suffix, 4);
         tor_outfiles[i] = fopen(filename, "w");
-        fprintf(tor_outfiles[i], "flow_id, src, dst, port, arrival_time, direction\n");
+        fprintf(tor_outfiles[i], "flow_id, src, dst, port, arrival_time, creation_time, direction\n");
     }
 }
 

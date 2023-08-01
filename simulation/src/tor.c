@@ -80,20 +80,29 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
         int64_t val = access_sram(tor->sram, pkt->flow_id);
         // Cache miss
         if (val < 0) {
-            // printf("ToR %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
-            // If access is successful, pull flow up to SRAM and return while logging cache miss
-            if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
+            if (tor->dram->lock == 0) {
                 (*cache_misses)++;
                 tor->cache_misses++;
-                tor->dram->accessible[pkt->flow_id] = 0;
-                pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
-                return move_to_up_send_buffer(tor, port);
+
+                tor->dram->lock = 1;
+                tor->dram->accessing = pkt->flow_id;
+                tor->dram->placement_idx = 0;
             }
-            // Otherwise, continue trying to access and return NULL
-            else {
-                tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
-                return NULL;
-            }
+            
+            // printf("ToR %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
+            // If access is successful, pull flow up to SRAM and return while logging cache miss
+            // if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
+            //     (*cache_misses)++;
+            //     tor->cache_misses++;
+            //     tor->dram->accessible[pkt->flow_id] = 0;
+            //     pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
+            //     return move_to_up_send_buffer(tor, port);
+            // }
+            // // Otherwise, continue trying to access and return NULL
+            // else {
+            //     tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
+            //     return NULL;
+            // }
         }
         // Cache hit
         else {
