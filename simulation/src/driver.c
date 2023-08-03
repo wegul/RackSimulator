@@ -991,14 +991,14 @@ void work_per_timeslot()
             int completed_flows = 0;
             for (int i = 0; i < flowlist->num_flows; i++) {
                 if (flowlist->flows[i]->finished > 0) {
-                    avg_flow_completion_time += flowlist->flows[i]->finish_timeslot;
+                    avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->start_timeslot;
                     completed_flows++;
                 }
             }
             if (completed_flows > 0) {
                 avg_flow_completion_time /= completed_flows;
             }
-            printf("Avg flow completion time: %d\n", avg_flow_completion_time);
+            printf("Avg flow completion time: %0.3f\n", avg_flow_completion_time);
             printf("Flows completed: %d\n", completed_flows);
 
             double curr_time = curr_timeslot * timeslot_len / 1e9;
