@@ -57,7 +57,7 @@ int64_t num_of_flows_to_start = 50000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
-volatile int64_t max_bytes_rcvd = 10000000;
+volatile int64_t max_bytes_rcvd = 1000000;
 
 // Output files
 FILE * out_fp = NULL;
