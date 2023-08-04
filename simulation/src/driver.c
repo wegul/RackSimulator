@@ -991,7 +991,7 @@ void work_per_timeslot()
             int completed_flows = 0;
             for (int i = 0; i < flowlist->num_flows; i++) {
                 if (flowlist->flows[i]->finished > 0) {
-                    avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->start_timeslot;
+                    avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
                     completed_flows++;
                 }
             }
