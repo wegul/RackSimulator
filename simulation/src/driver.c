@@ -50,14 +50,14 @@ static volatile int8_t terminate4 = 0;
 static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
-int64_t num_of_flows_to_finish = 50000; //stop after these many flows finish
+int64_t num_of_flows_to_finish = 5000; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = 50000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
-volatile int64_t max_bytes_rcvd = 1000000;
+volatile int64_t max_bytes_rcvd = 10000000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -967,10 +967,10 @@ void work_per_timeslot()
         //     terminate1 = 1;
         // }
 
-        // if (num_of_flows_finished >= num_of_flows_to_finish) {
-        //     printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
-        //     terminate2 = 1;
-        // }
+        if (num_of_flows_finished >= num_of_flows_to_finish) {
+            printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
+            terminate2 = 1;
+        }
 
         // if (curr_timeslot >= max_timeslots) {
         //     printf("\nReached max timeslot %d\n\n", (int) curr_timeslot);
@@ -982,23 +982,40 @@ void work_per_timeslot()
         //     terminate4 = 1;
         // }
 
-        if (total_bytes_rcvd >= max_bytes_rcvd) {
-            printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
-            terminate5 = 1;
-        }
+        // if (total_bytes_rcvd >= max_bytes_rcvd) {
+        //     printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
+        //     terminate5 = 1;
+        // }
 
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
             int completed_flows = 0;
+            int flow_completion_times[flowlist->num_flows];
+            printf("FCT: ");
             for (int i = 0; i < flowlist->num_flows; i++) {
                 if (flowlist->flows[i]->finished > 0) {
+                    printf("%d, ", flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot);
+                    flow_completion_times[completed_flows] = flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
                     avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
                     completed_flows++;
                 }
             }
+            printf("\n");
+
+            int pct99fct = 0;
+            int medfct = 0;
+            qsort(flow_completion_times, completed_flows, sizeof(int), comp);
+
             if (completed_flows > 0) {
                 avg_flow_completion_time /= completed_flows;
+                int pct99 = (completed_flows * 99 + 99) / 100;
+                pct99fct = flow_completion_times[pct99 - 1];
+                int pct50 = (completed_flows * 50) / 100;
+                medfct = flow_completion_times[pct50 - 1];
             }
+
             printf("Avg flow completion time: %0.3f\n", avg_flow_completion_time);
+            printf("Median flow completion time: %d\n", medfct);
+            printf("99th %%ile FCT: %d\n", pct99fct);
             printf("Flows completed: %d\n", completed_flows);
 
             double curr_time = curr_timeslot * timeslot_len / 1e9;
@@ -1008,12 +1025,12 @@ void work_per_timeslot()
             break;
         }
 
-        if (curr_timeslot % 50 == 0) {
-            printf(".");
-        }
-        if (curr_timeslot % 1000 == 999) {
-            printf(".\n");
-        }
+        // if (curr_timeslot % 50 == 0) {
+        //     printf(".");
+        // }
+        // if (curr_timeslot % 1000 == 999) {
+        //     printf(".\n");
+        // }
 
         curr_timeslot++;
     }
@@ -1037,6 +1054,15 @@ void shuffle(int * array, size_t n) {
             array[i] = t;
         }
     }
+}
+
+int comp (const void * elem1, const void * elem2) 
+{
+    int f = *((int*)elem1);
+    int s = *((int*)elem2);
+    if (f > s) return  1;
+    if (f < s) return -1;
+    return 0;
 }
 
 void process_args(int argc, char ** argv) {
