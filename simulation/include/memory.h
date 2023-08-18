@@ -24,6 +24,19 @@ typedef struct dm_sram {
     int64_t * memory;
 } dm_sram_t;
 
+// LFU SRAM
+typedef struct lfu_node {
+    int64_t flow_id;
+    int64_t val;
+    int frequency;
+} lfu_node_t;
+
+typedef struct lfu_sram {
+    int32_t capacity;
+    int32_t count;
+    lfu_node_t ** cache;
+} lfu_sram_t;
+
 typedef struct dram {
     int32_t delay;
     int32_t accesses;
@@ -38,6 +51,8 @@ typedef struct dram {
 
 lru_node_t * create_lru_node(int64_t flow_id, int64_t val);
 sram_t * create_sram(int32_t size, int16_t initialize);
+lfu_node_t * create_lfu_node(int64_t flow_id, int64_t val);
+lfu_sram_t * create_lfu_sram(int32_t size, int16_t initialize);
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize);
 dram_t * create_dram(int32_t size, int32_t delay);
 
@@ -47,12 +62,16 @@ lru_node_t * remove_node(lru_node_t ** head_ptr, int64_t flow_id);
 lru_node_t * remove_node_return_index(lru_node_t ** head_ptr, int64_t flow_id, int * idx);
 
 void initialize_sram(sram_t * sram);
+void initialize_lfu_sram(lfu_sram_t * sram);
 void initialize_dm_sram(dm_sram_t * dm_sram);
 
 int64_t evict_from_sram(sram_t * sram, dram_t * dram);
+int64_t evict_from_lfu_sram(lfu_sram_t * sram, dram_t * dram);
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id);
+int64_t pull_from_dram_lfu(lfu_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t access_sram(sram_t * sram, int64_t flow_id);
 int64_t access_sram_return_index(sram_t * sram, int64_t flow_id);
+int64_t access_lfu_sram(lfu_sram_t * sram, int64_t flow_id);
 
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
@@ -61,12 +80,14 @@ int64_t access_dm_sram(dm_sram_t * sram, int64_t flow_id);
 int64_t reorganize_sram(sram_t * sram, buffer_t * buffer);
 
 void print_sram(sram_t * sram);
+void print_lfu_sram(lfu_sram_t * sram);
 void print_dm_sram(dm_sram_t * sram);
 
 int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len);
 int64_t evict_belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len);
 
 void free_sram(sram_t * sram);
+void free_lfu_sram(lfu_sram_t * sram);
 void free_dm_sram(dm_sram_t * sram);
 void free_dram(dram_t * dram);
 

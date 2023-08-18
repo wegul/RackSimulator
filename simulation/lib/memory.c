@@ -130,6 +130,33 @@ sram_t * create_sram(int32_t size, int16_t initialize) {
     return sram;
 }
 
+lfu_node_t * create_lfu_node(int64_t flow_id, int64_t val) {
+    lfu_node_t * node = malloc(sizeof(lfu_node_t));
+    MALLOC_TEST(node, __LINE__);
+    node->flow_id = flow_id;
+    node->val = val;
+    node->frequency = 0;
+
+    return node;
+}
+
+lfu_sram_t * create_lfu_sram(int32_t size, int16_t initialize) {
+    lfu_sram_t * sram = malloc(sizeof(lfu_sram_t));
+    sram->capacity = size;
+    sram->count = 0;
+    sram->cache = malloc(sizeof(lfu_node_t *) * size);
+    
+    for (int i = 0; i < size; i++) {
+        sram->cache[i] = NULL;
+    }
+
+    if (initialize == 1) {
+        initialize_lfu_sram(sram);
+    }
+
+    return sram;
+}
+
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
     dm_sram_t * sram = malloc(sizeof(dm_sram_t));
     MALLOC_TEST(sram, __LINE__);
@@ -183,6 +210,14 @@ void initialize_sram(sram_t * sram) {
     sram->count = sram->capacity;
 }
 
+void initialize_lfu_sram(lfu_sram_t * sram) {
+    for (int i = 0; i < sram->capacity; i++) {
+        lfu_node_t * node = create_lfu_node(i, 0);
+        sram->cache[i] = node;
+    }
+    sram->count = sram->capacity;
+}
+
 void initialize_dm_sram(dm_sram_t * sram) {
     for (int i = 0; i < sram->capacity; i++) {
         sram->flow_ids[i] = i;
@@ -205,6 +240,42 @@ int64_t evict_from_sram(sram_t * sram, dram_t * dram) {
     }
 }
 
+int64_t evict_from_lfu_sram(lfu_sram_t * sram, dram_t * dram) {
+    if (sram->count > 0) {
+        int min_freq = 999999;
+        int min_idx = -1;
+        for (int i = sram->count - 1; i >= 0; i--) {
+            if (sram->cache[i]->frequency < min_freq) {
+                min_idx = i;
+                min_freq = sram->cache[i]->frequency;
+            }
+
+            if (min_freq = 0) {
+                break;
+            }
+        }
+
+        int64_t flow_id = sram->cache[min_idx]->flow_id;
+        int64_t val = sram->cache[min_idx]->val;
+
+        free(sram->cache[min_idx]);
+        sram->count--;
+
+        for (int i = min_idx; i < sram->count; i++) {
+            sram->cache[i] = sram->cache[i + 1];
+        }
+        sram->cache[sram->count] = NULL;
+
+        dram->memory[flow_id % DRAM_SIZE] = val;
+
+        return flow_id;
+    }
+    else {
+        // Nothing to evict
+        return -1;
+    }
+}
+
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
     lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id]);
     insert_node(&(sram->head), node, dram->placement_idx);
@@ -213,6 +284,16 @@ int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
     if (sram->count > sram->capacity) {
         evict_from_sram(sram, dram);
     }
+    return node->val;
+}
+
+int64_t pull_from_dram_lfu(lfu_sram_t * sram, dram_t * dram, int64_t flow_id) {
+    lfu_node_t * node = create_lfu_node(flow_id, dram->memory[flow_id]);
+    if (sram->count >= sram->capacity) {
+        evict_from_lfu_sram(sram, dram);
+    }
+    sram->cache[sram->count] = node;
+    sram->count++;
     return node->val;
 }
 
@@ -236,6 +317,18 @@ int64_t access_sram_return_index(sram_t * sram, int64_t flow_id) {
         node->val++;
         push(&(sram->head), node);
         return idx;
+    }
+    // Cache miss
+    return -1;
+}
+
+int64_t access_lfu_sram(lfu_sram_t * sram, int64_t flow_id) {
+    for (int i = 0; i < sram->count; i++) {
+        if (sram->cache[i]->flow_id == flow_id) {
+            sram->cache[i]->frequency++;
+            sram->cache[i]->val++;
+            return sram->cache[i]->val;
+        }
     }
     // Cache miss
     return -1;
@@ -288,12 +381,28 @@ void free_sram(sram_t * sram) {
     free(sram);
 }
 
+void free_lfu_sram(lfu_sram_t * sram) {
+    for (int i = 0; i < sram->count; i++) {
+        free(sram->cache[i]);
+    }
+    free(sram->cache);
+    free(sram);
+}
+
 void print_sram(sram_t * sram) {
     lru_node_t * head = sram->head;
     printf("Current sram state\n");
     while (head != NULL) {
         printf("%d, %d || ", (int) head->flow_id, (int) head->val);
         head = head->next;
+    }
+    printf("\n");
+}
+
+void print_lfu_sram(lfu_sram_t * sram) {
+    printf("Current sram state\n");
+    for (int i = 0; i < sram->count; i++) {
+        printf("%d (%d), %d || ", (int) sram->cache[i]->flow_id, (int) sram->cache[i]->frequency, (int) sram->cache[i]->val);
     }
     printf("\n");
 }

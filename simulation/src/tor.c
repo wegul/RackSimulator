@@ -27,6 +27,7 @@ tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
     self->cache_misses = 0;
 
     self->sram = create_sram(sram_size, init_sram);
+    self->lfu_sram = create_lfu_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
@@ -54,6 +55,7 @@ void free_tor(tor_t self)
         }
 
         free_sram(self->sram);
+        free_lfu_sram(self->lfu_sram);
         free_dm_sram(self->dm_sram);
         free_dram(self->dram);
 
@@ -61,7 +63,7 @@ void free_tor(tor_t self)
     }
 }
 
-packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits)
+packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits, int sram_type)
 {
     // Grab top packet in virtual queue if packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
@@ -75,9 +77,15 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
             pkt = (packet_t) buffer_get(tor->upstream_pkt_buffer[port]);
             int dst_spine = hash(tor->routing_table, pkt->flow_id);
             assert(buffer_put(tor->upstream_send_buffer[dst_spine], pkt) != -1);
-            return process_packets_up(tor, port, cache_misses, cache_hits);
+            return process_packets_up(tor, port, cache_misses, cache_hits, sram_type);
         }
-        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        int64_t val = -1;
+        if (sram_type == 1) {
+            val = access_sram(tor->sram, pkt->flow_id);
+        }
+        else if (sram_type == 2) {
+            val = access_lfu_sram(tor->lfu_sram, pkt->flow_id);
+        }
         // Cache miss
         if (val < 0) {
             if (tor->dram->lock == 0) {
@@ -88,21 +96,7 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
                 tor->dram->accessing = pkt->flow_id;
                 tor->dram->placement_idx = 0;
             }
-            
-            // printf("ToR %d Cache Miss Flow %d\n", tor->tor_index, (int) pkt->flow_id);
-            // If access is successful, pull flow up to SRAM and return while logging cache miss
-            // if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
-            //     (*cache_misses)++;
-            //     tor->cache_misses++;
-            //     tor->dram->accessible[pkt->flow_id] = 0;
-            //     pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
-            //     return move_to_up_send_buffer(tor, port);
-            // }
-            // // Otherwise, continue trying to access and return NULL
-            // else {
-            //     tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
-            //     return NULL;
-            // }
+
         }
         // Cache hit
         else {
@@ -196,7 +190,7 @@ packet_t send_to_spine_dram_only(tor_t tor, int16_t spine_id, int64_t * cache_mi
     return NULL;
 }
 
-packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits)
+packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits, int sram_type)
 {
     //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
@@ -209,23 +203,24 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
             pkt = (packet_t) buffer_get(tor->downstream_pkt_buffer[port]);
             int dst_host = pkt->dst_node % NODES_PER_RACK;
             assert(buffer_put(tor->downstream_send_buffer[dst_host], pkt) != -1);
-            return process_packets_down(tor, port, cache_misses, cache_hits);
+            return process_packets_down(tor, port, cache_misses, cache_hits, sram_type);
         }
-        int64_t val = access_sram(tor->sram, pkt->flow_id);
+        int64_t val = -1;
+        if (sram_type == 1) {
+            val = access_sram(tor->sram, pkt->flow_id);
+        }
+        else if (sram_type == 2) {
+            val = access_lfu_sram(tor->lfu_sram, pkt->flow_id);
+        }
         // Cache miss
         if (val < 0) {
-            // If access is successful, pull flow up to SRAM and return while logging cache miss
-            if (tor->dram->accessible[pkt->flow_id] >= tor->dram->delay) {
+            if (tor->dram->lock == 0) {
                 (*cache_misses)++;
                 tor->cache_misses++;
-                tor->dram->accessible[pkt->flow_id] = 0;
-                pull_from_dram(tor->sram, tor->dram, pkt->flow_id);
-                return move_to_down_send_buffer(tor, port);
-            }
-            // Otherwise, continue trying to access and return NULL
-            else {
-                tor->dram->accessible[pkt->flow_id] += tor->dram->accesses;
-                return NULL;
+
+                tor->dram->lock = 1;
+                tor->dram->accessing = pkt->flow_id;
+                tor->dram->placement_idx = 0;
             }
         }
         // Cache hit

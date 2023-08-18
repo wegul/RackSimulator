@@ -22,6 +22,7 @@ struct spine {
     int64_t cache_misses;
     //memory datastructure
     sram_t * sram;
+    lfu_sram_t * lfu_sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
     //separate snapshot lists for each downstream port
@@ -34,7 +35,7 @@ extern spine_t* spines;
 
 spine_t create_spine(int16_t, int32_t, int16_t);
 void free_spine(spine_t);
-packet_t process_packets(spine_t, int16_t, int64_t *, int64_t *);
+packet_t process_packets(spine_t, int16_t, int64_t *, int64_t *, int);
 packet_t move_to_send_buffer(spine_t, int16_t);
 packet_t send_to_tor(spine_t, int16_t);
 packet_t send_to_tor_dm(spine_t, int16_t, int64_t *, int64_t *);

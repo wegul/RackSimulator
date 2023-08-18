@@ -24,7 +24,7 @@ int num_datapoints = 100000;
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAMs
 int program_tors = 1; // Value of 1 = ToRs are programmable
-int fully_associative = 1; // Value of 1 = use fully-associative SRAM
+int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 1; // Number of packets to send in a burst
 int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst mode
@@ -101,8 +101,14 @@ void work_per_timeslot()
                 spine->dram->lock++;
 
                 if (spine->dram->lock > spine->dram->delay) {
-                    pull_from_dram(spine->sram, spine->dram, spine->dram->accessing);
-                    //printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
+                    if (sram_type == 1) {
+                        pull_from_dram(spine->sram, spine->dram, spine->dram->accessing);
+                    }
+                    else if (sram_type == 2) {
+                        pull_from_dram_lfu(spine->lfu_sram, spine->dram, spine->dram->accessing);
+                    }
+                   
+                    // printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
 
                     // Reset DRAM lock
                     spine->dram->lock = 0;
@@ -120,8 +126,14 @@ void work_per_timeslot()
                 tor->dram->lock++;
 
                 if (tor->dram->lock > tor->dram->delay) {
-                    pull_from_dram(tor->sram, tor->dram, tor->dram->accessing);
-                    //printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
+                    if (sram_type == 1) {
+                        pull_from_dram(tor->sram, tor->dram, tor->dram->accessing);
+                    }
+                    else if (sram_type == 2) { 
+                        pull_from_dram_lfu(tor->lfu_sram, tor->dram, tor->dram->accessing);
+                    }
+
+                    // printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
 
                     // Reset DRAM lock
                     tor->dram->lock = 0;
@@ -159,7 +171,7 @@ void work_per_timeslot()
             // Process packets for each port
             for (int j = 0; j < SPINE_PORT_COUNT; j++) {
                 int64_t misses_before = cache_misses;
-                process_packets(spine, j, &cache_misses, &cache_hits);
+                process_packets(spine, j, &cache_misses, &cache_hits, sram_type);
             }
         }
 /*---------------------------------------------------------------------------*/
@@ -173,14 +185,14 @@ void work_per_timeslot()
             // Process packets on upstream pipelines
             for (int j = 0; j < NODES_PER_RACK; j++) {
                 int64_t misses_before = cache_misses;
-                //process_packets_up(tor, j, &cache_misses, &cache_hits);
+                //process_packets_up(tor, j, &cache_misses, &cache_hits, sram_type);
                 move_to_up_send_buffer(tor, j);
             }
 
             // Process packets on downstream pipelines
             for (int j = 0; j < NUM_OF_SPINES; j++) {
                 int64_t misses_before = cache_misses;
-                process_packets_down(tor, j, &cache_misses, &cache_hits);
+                process_packets_down(tor, j, &cache_misses, &cache_hits, sram_type);
             }
         }
 
@@ -313,8 +325,11 @@ void work_per_timeslot()
                         if (node->current_flow != NULL && curr_timeslot == 0) {
                             for (int k = 0; k < NUM_OF_SPINES; k++) {
                                 spine_t spine = spines[k];
-                                if (fully_associative) {
+                                if (sram_type == 1) {
                                     pull_from_dram(spine->sram, spine->dram, flow->flow_id);
+                                }
+                                else if (sram_type == 2) {
+                                    pull_from_dram_lfu(spine->lfu_sram, spine->dram, flow->flow_id);
                                 }
                                 else {
                                     dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
@@ -322,13 +337,16 @@ void work_per_timeslot()
                             }
                             for (int k = 0; k < NUM_OF_RACKS; k++) {
                                 tor_t tor = tors[k];
-                                if (fully_associative) {
+                                if (sram_type == 1) {
                                     pull_from_dram(tor->sram, tor->dram, flow->flow_id);
+                                }
+                                else if (sram_type == 2) {
+                                    pull_from_dram_lfu(tor->lfu_sram, tor->dram, flow->flow_id);
                                 }
                                 else {
                                     dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
+                                }
                             }
-                        }
                         }
                     }
                     // Burst size has not been reached; keep sending from current flow
@@ -462,26 +480,32 @@ void work_per_timeslot()
                     }
 
                     // Ensure initial flows exist in memory already so as not to flood cache misses start of simulation
-                    if (node->current_flow != NULL && curr_timeslot == 0) {
-                        for (int k = 0; k < NUM_OF_SPINES; k++) {
-                            spine_t spine = spines[k];
-                            if (fully_associative) {
-                                pull_from_dram(spine->sram, spine->dram, flow->flow_id);
-                            }
-                            else {
-                                dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
-                            }
-                        }
-                        for (int k = 0; k < NUM_OF_RACKS; k++) {
-                            tor_t tor = tors[k];
-                            if (fully_associative) {
-                                pull_from_dram(tor->sram, tor->dram, flow->flow_id);
-                            }
-                            else {
-                                dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
-                            }
-                        }
-                    }
+                    // if (node->current_flow != NULL && curr_timeslot == 0) {
+                    //     for (int k = 0; k < NUM_OF_SPINES; k++) {
+                    //         spine_t spine = spines[k];
+                    //         if (sram_type == 1) {
+                    //             pull_from_dram(spine->sram, spine->dram, flow->flow_id);
+                    //         }
+                    //         else if (sram_type == 2) {
+                    //             pull_from_dram_lfu(spine->lfu_sram, spine->dram, flow->flow_id);
+                    //         }
+                    //         else {
+                    //             dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
+                    //         }
+                    //     }
+                    //     for (int k = 0; k < NUM_OF_RACKS; k++) {
+                    //         tor_t tor = tors[k];
+                    //         if (sram_type == 1) {
+                    //             pull_from_dram(tor->sram, tor->dram, flow->flow_id);
+                    //         }
+                    //         else if (sram_type == 2) {
+                    //             pull_from_dram_lfu(tor->lfu_sram, tor->dram, flow->flow_id);
+                    //         }
+                    //         else {
+                    //             dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
+                    //         }
+                    //     }
+                    // }
                 }
                 flow = node->current_flow;
                 // Sending Period
@@ -982,10 +1006,10 @@ void work_per_timeslot()
         //     terminate4 = 1;
         // }
 
-        // if (total_bytes_rcvd >= max_bytes_rcvd) {
-        //     printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
-        //     terminate5 = 1;
-        // }
+        if (total_bytes_rcvd >= max_bytes_rcvd) {
+            printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
+            terminate5 = 1;
+        }
 
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
             int completed_flows = 0;
@@ -1107,12 +1131,15 @@ void process_args(int argc, char ** argv) {
                 printf("Writing %d queue length datapoints to timeseries.csv file\n", num_datapoints);
                 break;
             case 'a':
-                fully_associative = atoi(optarg);
-                if (fully_associative == 0) {
+                sram_type = atoi(optarg);
+                if (sram_type == 0) {
                     printf("Using direct-mapped SRAM\n");
                 }
-                else {
-                    printf("Using fully-associative SRAM\n");
+                else if (sram_type == 1) {
+                    printf("Using LRU SRAM\n");
+                }
+                else if (sram_type == 2) {
+                    printf("Using LFU SRAM\n");
                 }
                 break;
             case 'e':
@@ -1129,10 +1156,12 @@ void process_args(int argc, char ** argv) {
                 printf("Utilizing SRAM size of %d\n", (int) sram_size);
                 for (int i = 0; i < NUM_OF_SPINES; i++) {
                     spines[i]->sram->capacity = sram_size;
+                    spines[i]->lfu_sram->capacity = sram_size;
                     spines[i]->dm_sram->capacity = sram_size;
                 }
                 for (int i = 0; i < NUM_OF_RACKS; i++) {
                     tors[i]->sram->capacity = sram_size;
+                    tors[i]->lfu_sram->capacity = sram_size;
                     tors[i]->dm_sram->capacity = sram_size;
                 }
                 break;

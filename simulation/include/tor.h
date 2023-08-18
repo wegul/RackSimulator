@@ -25,6 +25,7 @@ struct tor {
     int64_t cache_misses;
     //memory datastructure
     sram_t * sram;
+    lfu_sram_t * lfu_sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
     //separate snapshot lists for each upstream and downstream port
@@ -39,8 +40,8 @@ extern tor_t* tors;
 
 tor_t create_tor(int16_t, int32_t, int16_t);
 void free_tor(tor_t);
-packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits);
-packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits);
+packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits, int sram_type);
+packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, int64_t * cache_hits, int sram_type);
 packet_t move_to_up_send_buffer(tor_t tor, int16_t port);
 packet_t move_to_down_send_buffer(tor_t tor, int16_t port);
 packet_t send_to_spine_baseline(tor_t, int16_t);

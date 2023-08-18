@@ -18,6 +18,7 @@ spine_t create_spine(int16_t spine_index, int32_t sram_size, int16_t init_sram)
     self->cache_misses = 0;
 
     self->sram = create_sram(sram_size, init_sram);
+    self->lfu_sram = create_lfu_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
@@ -39,13 +40,14 @@ void free_spine(spine_t self)
         }
 
         free_sram(self->sram);
+        free_lfu_sram(self->lfu_sram);
         free_dm_sram(self->dm_sram);
         free_dram(self->dram);
         free(self);
     }
 }
 
-packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, int64_t * cache_hits)
+packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, int64_t * cache_hits, int sram_type)
 {
     //Grab the top packet in the virtual queue if the packet's flow_id is in the SRAM, otherwise pull from DRAM due to cache miss
     packet_t pkt = NULL;
@@ -59,10 +61,17 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
             int dst_host = pkt->dst_node;
             int dst_tor = dst_host / NODES_PER_RACK;
             assert(buffer_put(spine->send_buffer[dst_tor], pkt) != -1);
-            return process_packets(spine, port, cache_misses, cache_hits);
+            return process_packets(spine, port, cache_misses, cache_hits, sram_type);
         }
+        int64_t val = -1;
         // Determine if flow id is in SRAM
-        int64_t val = access_sram(spine->sram, pkt->flow_id);
+        if (sram_type == 1) {
+            val = access_sram(spine->sram, pkt->flow_id);
+        }
+        else if (sram_type == 2) {
+            val = access_lfu_sram(spine->lfu_sram, pkt->flow_id);
+        }
+        
         // Cache miss
         if (val < 0) {
             // Memory is not locked, can begin DRAM access on this timeslot
@@ -74,22 +83,6 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
                 spine->dram->accessing = pkt->flow_id;
                 spine->dram->placement_idx = 0;
             }
-
-            // printf("Spine %d Cache Miss Flow %d\n", spine->spine_index, (int) pkt->flow_id);
-            // If access is successful, pull flow up to SRAM and return while logging cache miss
-            // if (spine->dram->accessible[pkt->flow_id] >= spine->dram->delay) {
-            //     (*cache_misses)++;
-            //     spine->cache_misses++;
-            //     spine->dram->accessible[pkt->flow_id] = 0;
-            //     pull_from_dram(spine->sram, spine->dram, pkt->flow_id);
-            //     return move_to_send_buffer(spine, port);
-            // }
-            // // Otherwise, continue trying to access and return NULL
-            // else {
-            //     // Change back after done collecting 0-time packet traces
-            //     spine->dram->accessible[pkt->flow_id] += spine->dram->accesses;
-            //     return NULL;
-            // }
         }
         // Cache hit
         else {
