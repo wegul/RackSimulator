@@ -870,6 +870,8 @@ void work_per_timeslot()
                         flow->finish_timeslot = curr_timeslot;
                         num_of_flows_finished++;
                         write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
+                        printf("%d: Flow %d finished in %d timeslots\n", (int) curr_timeslot, (int) flow->flow_id, (int) (flow->finish_timeslot - flow->timeslot));
+                        fflush(stdout);
 #ifdef DEBUG_DRIVER
                         printf("%d: Flow %d finished\n", (int) curr_timeslot, (int) flow->flow_id);
 #endif
