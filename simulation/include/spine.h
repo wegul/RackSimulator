@@ -23,6 +23,7 @@ struct spine {
     //memory datastructure
     sram_t * sram;
     lfu_sram_t * lfu_sram;
+    arc_sram_t * arc_sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
     //separate snapshot lists for each downstream port
@@ -43,7 +44,7 @@ packet_t send_to_tor_dram_only(spine_t spine, int16_t tor_num, int64_t * cache_m
 void clean_sram(spine_t);
 void clean_dm_sram(spine_t);
 snapshot_t * snapshot_to_tor(spine_t, int16_t);
-snapshot_t * snapshot_array_spine(spine_t);
+snapshot_t ** snapshot_array_spine(spine_t);
 int64_t spine_buffer_bytes(spine_t, int);
 int64_t * linearize_spine_queues(spine_t, int *);
 

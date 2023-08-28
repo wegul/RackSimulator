@@ -24,7 +24,7 @@ int num_datapoints = 100000;
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAMs
 int program_tors = 1; // Value of 1 = ToRs are programmable
-int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM
+int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM, 3: ARC SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 1; // Number of packets to send in a burst
 int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst mode
@@ -107,6 +107,9 @@ void work_per_timeslot()
                     else if (sram_type == 2) {
                         pull_from_dram_lfu(spine->lfu_sram, spine->dram, spine->dram->accessing);
                     }
+                    else if (sram_type == 3) {
+                        pull_from_dram_arc(spine->arc_sram, spine->dram, spine->dram->accessing);
+                    }
                    
                     // printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
 
@@ -131,6 +134,9 @@ void work_per_timeslot()
                     }
                     else if (sram_type == 2) { 
                         pull_from_dram_lfu(tor->lfu_sram, tor->dram, tor->dram->accessing);
+                    }
+                    else if (sram_type == 3) {
+                        pull_from_dram_arc(tor->arc_sram, tor->dram, tor->dram->accessing);
                     }
 
                     // printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
@@ -331,6 +337,9 @@ void work_per_timeslot()
                                 else if (sram_type == 2) {
                                     pull_from_dram_lfu(spine->lfu_sram, spine->dram, flow->flow_id);
                                 }
+                                else if (sram_type == 3) {
+                                    pull_from_dram_arc(spine->arc_sram, spine->dram, flow->flow_id);
+                                }
                                 else {
                                     dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
                                 }
@@ -342,6 +351,9 @@ void work_per_timeslot()
                                 }
                                 else if (sram_type == 2) {
                                     pull_from_dram_lfu(tor->lfu_sram, tor->dram, flow->flow_id);
+                                }
+                                else if (sram_type == 3) {
+                                    pull_from_dram_arc(tor->arc_sram, tor->dram, flow->flow_id);
                                 }
                                 else {
                                     dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
@@ -1143,6 +1155,9 @@ void process_args(int argc, char ** argv) {
                 else if (sram_type == 2) {
                     printf("Using LFU SRAM\n");
                 }
+                else if (sram_type == 3) {
+                    printf("Using ARC SRAM\n");
+                }
                 break;
             case 'e':
                 enable_sram = atoi(optarg);
@@ -1159,11 +1174,13 @@ void process_args(int argc, char ** argv) {
                 for (int i = 0; i < NUM_OF_SPINES; i++) {
                     spines[i]->sram->capacity = sram_size;
                     spines[i]->lfu_sram->capacity = sram_size;
+                    spines[i]->arc_sram->capacity = sram_size;
                     spines[i]->dm_sram->capacity = sram_size;
                 }
                 for (int i = 0; i < NUM_OF_RACKS; i++) {
                     tors[i]->sram->capacity = sram_size;
                     tors[i]->lfu_sram->capacity = sram_size;
+                    tors[i]->arc_sram->capacity = sram_size;
                     tors[i]->dm_sram->capacity = sram_size;
                 }
                 break;

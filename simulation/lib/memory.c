@@ -116,6 +116,58 @@ lru_node_t * remove_node_return_index(lru_node_t ** head_ptr, int64_t flow_id, i
     return NULL;
 }
 
+void insert_L1_arc_node(arc_sram_t * sram, arc_node_t * node, int index) {
+    for (int i = sram->l1_count; i > index; i--) {
+        sram->l1_cache[i] = sram->l1_cache[i - 1];
+    }
+    sram->l1_cache[index] = node;
+    sram->l1_count++;
+}
+
+void insert_L2_arc_node(arc_sram_t * sram, arc_node_t * node, int index) {
+    for (int i = sram->l2_count; i > index; i--) {
+        sram->l2_cache[i] = sram->l2_cache[i - 1];
+    }
+    sram->l2_cache[index] = node;
+    sram->l2_count++;
+}
+
+arc_node_t * remove_L1_arc_node(arc_sram_t * sram, int index) {
+    arc_node_t * node = sram->l1_cache[index];
+    for (int i = index; i < sram->l1_count - 1; i++) {
+        sram->l1_cache[i] = sram->l1_cache[i + 1];
+    }
+    sram->l1_cache[sram->l1_count - 1] = NULL;
+    sram->l1_count--;
+    return node;
+}
+
+arc_node_t * remove_L2_arc_node(arc_sram_t * sram, int index) {
+    arc_node_t * node = sram->l2_cache[index];
+    for (int i = index; i < sram->l2_count - 1; i++) {
+        sram->l2_cache[i] = sram->l2_cache[i + 1];
+    }
+    sram->l2_cache[sram->l2_count - 1] = NULL;
+    sram->l2_count--;
+    return node;
+}
+
+void reinsert_L1_arc_node(arc_sram_t * sram, int index) {
+    arc_node_t * node = sram->l1_cache[index];
+    for (int i = index; i > 0; i--) {
+        sram->l1_cache[i] = sram->l1_cache[i - 1];
+    }
+    sram->l1_cache[0] = node;
+}
+
+void reinsert_L2_arc_node(arc_sram_t * sram, int index) {
+    arc_node_t * node = sram->l2_cache[index];
+    for (int i = index; i > 0; i--) {
+        sram->l2_cache[i] = sram->l2_cache[i - 1];
+    }
+    sram->l2_cache[0] = node;
+}
+
 sram_t * create_sram(int32_t size, int16_t initialize) {
     sram_t * sram = malloc(sizeof(sram_t));
     MALLOC_TEST(sram, __LINE__);
@@ -152,6 +204,38 @@ lfu_sram_t * create_lfu_sram(int32_t size, int16_t initialize) {
 
     if (initialize == 1) {
         initialize_lfu_sram(sram);
+    }
+
+    return sram;
+}
+
+arc_node_t * create_arc_node(int64_t flow_id, int64_t val) {
+    arc_node_t * node = malloc(sizeof(arc_node_t));
+    MALLOC_TEST(node, __LINE__);
+    node->flow_id = flow_id;
+    node->val = val;
+    node->frequency = 0;
+
+    return node;
+}
+
+arc_sram_t * create_arc_sram(int32_t size, int16_t initialize) {
+    arc_sram_t * sram = malloc(sizeof(arc_sram_t));
+    sram->capacity = size; // size = 2c
+    sram->l1_count = 0;
+    sram->l2_count = 0;
+    sram->l1_cache = malloc(sizeof(arc_sram_t *) * size / 2); // maximum L1 cache size is c
+    sram->l2_cache = malloc(sizeof(arc_sram_t *) * size); // maximum L2 cache size is 2c
+
+    for (int i = 0; i < size; i++) {
+        if (i < size / 2) {
+            sram->l1_cache[i] = NULL;
+        }
+        sram->l2_cache[i] = NULL;
+    }
+
+    if (initialize == 1) {
+        initialize_arc_sram(sram);
     }
 
     return sram;
@@ -218,6 +302,14 @@ void initialize_lfu_sram(lfu_sram_t * sram) {
     sram->count = sram->capacity;
 }
 
+void initialize_arc_sram(arc_sram_t * sram) {
+    for (int i = 0; i < sram->capacity / 2; i++) {
+        arc_node_t * node = create_arc_node(i, 0);
+        sram->l1_cache[i] = node;
+    }
+    sram->l1_count = sram->capacity / 2;
+}
+
 void initialize_dm_sram(dm_sram_t * sram) {
     for (int i = 0; i < sram->capacity; i++) {
         sram->flow_ids[i] = i;
@@ -276,6 +368,36 @@ int64_t evict_from_lfu_sram(lfu_sram_t * sram, dram_t * dram) {
     }
 }
 
+int64_t evict_from_arc_sram(arc_sram_t * sram, dram_t * dram) {
+    if (sram->l1_count + sram->l2_count > 0) {
+        arc_node_t * evicted = NULL;
+        // L1 >= c: evict from L1
+        if (sram->l1_count >= sram->capacity / 2) {
+            sram->l1_count--;
+            evicted = sram->l1_cache[sram->l1_count];
+            sram->l1_cache[sram->l1_count] = NULL;
+        }
+        // L1 < c: evict from L2
+        else {
+            sram->l2_count--;
+            evicted = sram->l2_cache[sram->l2_count];
+            sram->l2_cache[sram->l2_count] = NULL;
+        }
+
+        int64_t flow_id = evicted->flow_id;
+        int64_t val = evicted->val;
+
+        free(evicted);
+
+        dram->memory[flow_id % DRAM_SIZE] = val;
+
+        return flow_id;
+    }
+    else {
+        return -1;
+    }
+}
+
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
     lru_node_t * node = create_lru_node(flow_id, dram->memory[flow_id]);
     insert_node(&(sram->head), node, dram->placement_idx);
@@ -294,6 +416,16 @@ int64_t pull_from_dram_lfu(lfu_sram_t * sram, dram_t * dram, int64_t flow_id) {
     }
     sram->cache[sram->count] = node;
     sram->count++;
+    return node->val;
+}
+
+int64_t pull_from_dram_arc(arc_sram_t * sram, dram_t * dram, int64_t flow_id) {
+    arc_node_t * node = create_arc_node(flow_id, dram->memory[flow_id]);
+    node->frequency++;
+    if (sram->l1_count > sram->capacity / 2 || sram->l1_count + sram->l2_count >= sram->capacity) {
+        evict_from_arc_sram(sram, dram);
+    }
+    insert_L1_arc_node(sram, node, 0);
     return node->val;
 }
 
@@ -328,6 +460,42 @@ int64_t access_lfu_sram(lfu_sram_t * sram, int64_t flow_id) {
             sram->cache[i]->frequency++;
             sram->cache[i]->val++;
             return sram->cache[i]->val;
+        }
+    }
+    // Cache miss
+    return -1;
+}
+
+int64_t access_arc_sram(arc_sram_t * sram, int64_t flow_id) {
+    // Access L1 cache
+    for (int i = 0; i < sram->l1_count; i++) {
+        arc_node_t * node = sram->l1_cache[i];
+        // Cache hit
+        if (node->flow_id == flow_id) {
+            if (node->frequency > 0) {
+                // Move to front of L2 cache
+                node = remove_L1_arc_node(sram, i);
+                insert_L2_arc_node(sram, node, 0);
+            }
+            else {
+                // Move to front of L1 cache
+                reinsert_L1_arc_node(sram, i);
+            }
+            node->frequency++;
+            node->val++;
+            return node->val;
+        }
+    }
+    // Access L2 cache
+    for (int i = 0; i < sram->l2_count; i++) {
+        arc_node_t * node = sram->l2_cache[i];
+        // Cache hit
+        if (node->flow_id == flow_id) {
+            // Move to front of L2 cache
+            reinsert_L2_arc_node(sram, i);
+            node->frequency++;
+            node->val++;
+            return node->val;
         }
     }
     // Cache miss
@@ -370,25 +538,6 @@ int64_t reorganize_sram(sram_t * sram, buffer_t * buffer) {
     return k;
 }
 
-void free_sram(sram_t * sram) {
-    lru_node_t * head = sram->head;
-    while (head != NULL) {
-        //printf("free sram node %d\n", (int) head->flow_id);
-        lru_node_t * next = head->next;
-        free(head);
-        head = next;
-    }
-    free(sram);
-}
-
-void free_lfu_sram(lfu_sram_t * sram) {
-    for (int i = 0; i < sram->count; i++) {
-        free(sram->cache[i]);
-    }
-    free(sram->cache);
-    free(sram);
-}
-
 void print_sram(sram_t * sram) {
     lru_node_t * head = sram->head;
     printf("Current sram state\n");
@@ -403,6 +552,19 @@ void print_lfu_sram(lfu_sram_t * sram) {
     printf("Current sram state\n");
     for (int i = 0; i < sram->count; i++) {
         printf("%d (%d), %d || ", (int) sram->cache[i]->flow_id, (int) sram->cache[i]->frequency, (int) sram->cache[i]->val);
+    }
+    printf("\n");
+}
+
+void print_arc_sram(arc_sram_t * sram) {
+    printf("Current sram state\n");
+    printf("L1 cache:\n");
+    for (int i = 0; i < sram->l1_count; i++) {
+        printf("%d (%d), %d || ", (int) sram->l1_cache[i]->flow_id, (int) sram->l1_cache[i]->frequency, (int) sram->l1_cache[i]->val);
+    }
+    printf("\nL2 cache:\n");
+    for (int i = 0; i < sram->l2_count; i++) {
+        printf("%d (%d), %d || ", (int) sram->l2_cache[i]->flow_id, (int) sram->l2_cache[i]->frequency, (int) sram->l2_cache[i]->val);
     }
     printf("\n");
 }
@@ -452,6 +614,37 @@ int64_t evict_belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_le
         evict_from_sram(sram, dram);
     }
     return -1;
+}
+
+void free_sram(sram_t * sram) {
+    lru_node_t * head = sram->head;
+    while (head != NULL) {
+        //printf("free sram node %d\n", (int) head->flow_id);
+        lru_node_t * next = head->next;
+        free(head);
+        head = next;
+    }
+    free(sram);
+}
+
+void free_lfu_sram(lfu_sram_t * sram) {
+    for (int i = 0; i < sram->count; i++) {
+        free(sram->cache[i]);
+    }
+    free(sram->cache);
+    free(sram);
+}
+
+void free_arc_sram(arc_sram_t * sram) {
+    for (int i = 0; i < sram->l1_count; i++) {
+        free(sram->l1_cache[i]);
+    }
+    for (int i = 0; i < sram->l2_count; i++) {
+        free(sram->l2_cache[i]);
+    }
+    free(sram->l1_cache);
+    free(sram->l2_cache);
+    free(sram);
 }
 
 void free_dm_sram(dm_sram_t * sram) {

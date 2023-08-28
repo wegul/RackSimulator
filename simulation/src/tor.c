@@ -28,6 +28,7 @@ tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
 
     self->sram = create_sram(sram_size, init_sram);
     self->lfu_sram = create_lfu_sram(sram_size, init_sram);
+    self->arc_sram = create_arc_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
@@ -56,6 +57,7 @@ void free_tor(tor_t self)
 
         free_sram(self->sram);
         free_lfu_sram(self->lfu_sram);
+        free_arc_sram(self->arc_sram);
         free_dm_sram(self->dm_sram);
         free_dram(self->dram);
 
@@ -85,6 +87,9 @@ packet_t process_packets_up(tor_t tor, int16_t port, int64_t * cache_misses, int
         }
         else if (sram_type == 2) {
             val = access_lfu_sram(tor->lfu_sram, pkt->flow_id);
+        }
+        else if (sram_type == 3) {
+            val = access_arc_sram(tor->arc_sram, pkt->flow_id);
         }
         // Cache miss
         if (val < 0) {
@@ -212,6 +217,9 @@ packet_t process_packets_down(tor_t tor, int16_t port, int64_t * cache_misses, i
         else if (sram_type == 2) {
             val = access_lfu_sram(tor->lfu_sram, pkt->flow_id);
         }
+        else if (sram_type == 3) {
+            val = access_arc_sram(tor->arc_sram, pkt->flow_id);
+        }
         // Cache miss
         if (val < 0) {
             if (tor->dram->lock == 0) {
@@ -300,7 +308,7 @@ snapshot_t * snapshot_to_spine(tor_t tor, int16_t spine_id)
     return snapshot;
 }
 
-snapshot_t * snapshot_array_tor(tor_t tor) 
+snapshot_t ** snapshot_array_tor(tor_t tor) 
 {
     // Allocate array
     snapshot_t ** snapshot_array = malloc(sizeof(snapshot_t *) * NUM_OF_SPINES);

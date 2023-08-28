@@ -26,6 +26,7 @@ struct tor {
     //memory datastructure
     sram_t * sram;
     lfu_sram_t * lfu_sram;
+    arc_sram_t * arc_sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
     //separate snapshot lists for each upstream and downstream port
@@ -52,7 +53,7 @@ packet_t send_to_host_baseline(tor_t, int16_t);
 packet_t send_to_host(tor_t, int16_t);
 packet_t send_to_host_dram_only(tor_t tor, int16_t host_within_tor, int64_t * cache_misses);
 snapshot_t * snapshot_to_spine(tor_t, int16_t);
-snapshot_t * snapshot_array_tor(tor_t);
+snapshot_t ** snapshot_array_tor(tor_t);
 int64_t tor_up_buffer_bytes(tor_t, int);
 int64_t tor_down_buffer_bytes(tor_t, int);
 int64_t * linearize_tor_downstream_queues(tor_t, int *);
