@@ -9,6 +9,7 @@ do
     bin/driver -f trace_incast_144.csv.processed -a 1 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_incast_64.txt
     bin/driver -f trace_incast_144.csv.processed -a 2 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_incast_64.txt
     bin/driver -f trace_incast_144.csv.processed -a 3 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_incast_64.txt
+    bin/driver -f trace_incast_144.csv.processed -a 4 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_incast_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -37,6 +38,7 @@ do
         bin/driver -f trace_all_to_all_144.csv.processed -a 1 -s $sram -i 1 -u 5 -l $load >> experiment_all_to_all_64.txt
         bin/driver -f trace_all_to_all_144.csv.processed -a 2 -s $sram -i 1 -u 5 -l $load >> experiment_all_to_all_64.txt
         bin/driver -f trace_all_to_all_144.csv.processed -a 3 -s $sram -i 1 -u 5 -l $load >> experiment_all_to_all_64.txt
+        bin/driver -f trace_all_to_all_144.csv.processed -a 4 -s $sram -i 1 -u 5 -l $load >> experiment_all_to_all_64.txt
     done
 
     echo "Seer and Belady cases"
@@ -66,6 +68,7 @@ do
         bin/driver -f trace_permutation_144.csv.processed -a 1 -s $sram -i 1 -u 5 -l $load >> experiment_permutation_64.txt
         bin/driver -f trace_permutation_144.csv.processed -a 2 -s $sram -i 1 -u 5 -l $load >> experiment_permutation_64.txt
         bin/driver -f trace_permutation_144.csv.processed -a 3 -s $sram -i 1 -u 5 -l $load >> experiment_permutation_64.txt
+        bin/driver -f trace_permutation_144.csv.processed -a 4 -s $sram -i 1 -u 5 -l $load >> experiment_permutation_64.txt
     done
 
     echo "Seer and Belady cases"
@@ -93,6 +96,7 @@ do
     bin/driver -f trace-100G-0.3-aditya.csv.processed -a 1 -u 5 -s $sram >> experiment_aditya_03_64.txt
     bin/driver -f trace-100G-0.3-aditya.csv.processed -a 2 -u 5 -s $sram >> experiment_aditya_03_64.txt
     bin/driver -f trace-100G-0.3-aditya.csv.processed -a 3 -u 5 -s $sram >> experiment_aditya_03_64.txt
+    bin/driver -f trace-100G-0.3-aditya.csv.processed -a 4 -u 5 -s $sram >> experiment_aditya_03_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -117,6 +121,7 @@ do
     bin/driver -f trace-100G-0.6-aditya.csv.processed -a 1 -u 5 -s $sram >> experiment_aditya_06_64.txt
     bin/driver -f trace-100G-0.6-aditya.csv.processed -a 2 -u 5 -s $sram >> experiment_aditya_06_64.txt
     bin/driver -f trace-100G-0.6-aditya.csv.processed -a 3 -u 5 -s $sram >> experiment_aditya_06_64.txt
+    bin/driver -f trace-100G-0.6-aditya.csv.processed -a 4 -u 5 -s $sram >> experiment_aditya_06_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -141,6 +146,7 @@ do
     bin/driver -f trace-100G-0.9-aditya.csv.processed -a 1 -i 1 -u 5 -s $sram >> experiment_aditya_09_64.txt
     bin/driver -f trace-100G-0.9-aditya.csv.processed -a 2 -i 1 -u 5 -s $sram >> experiment_aditya_09_64.txt
     bin/driver -f trace-100G-0.9-aditya.csv.processed -a 3 -i 1 -u 5 -s $sram >> experiment_aditya_09_64.txt
+    bin/driver -f trace-100G-0.9-aditya.csv.processed -a 4 -i 1 -u 5 -s $sram >> experiment_aditya_09_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -167,6 +173,7 @@ do
     bin/driver -f trace-100G-0.3-datamining.csv.processed -a 1 -u 5 -s $sram >> experiment_datamining_03_64.txt
     bin/driver -f trace-100G-0.3-datamining.csv.processed -a 2 -u 5 -s $sram >> experiment_datamining_03_64.txt
     bin/driver -f trace-100G-0.3-datamining.csv.processed -a 3 -u 5 -s $sram >> experiment_datamining_03_64.txt
+    bin/driver -f trace-100G-0.3-datamining.csv.processed -a 4 -u 5 -s $sram >> experiment_datamining_03_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -191,6 +198,7 @@ do
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 1 -u 5 -s $sram >> experiment_datamining_06_64.txt
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 2 -u 5 -s $sram >> experiment_datamining_06_64.txt
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 3 -u 5 -s $sram >> experiment_datamining_06_64.txt
+    bin/driver -f trace-100G-0.6-datamining.csv.processed -a 4 -u 5 -s $sram >> experiment_datamining_06_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -215,6 +223,7 @@ do
     bin/driver -f trace-100G-0.9-datamining.csv.processed -a 1 -u 5 -s $sram >> experiment_datamining_09_64.txt
     bin/driver -f trace-100G-0.9-datamining.csv.processed -a 2 -u 5 -s $sram >> experiment_datamining_09_64.txt
     bin/driver -f trace-100G-0.9-datamining.csv.processed -a 3 -u 5 -s $sram >> experiment_datamining_09_64.txt
+    bin/driver -f trace-100G-0.9-datamining.csv.processed -a 4 -u 5 -s $sram >> experiment_datamining_09_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -241,6 +250,7 @@ do
     bin/driver -f trace-100G-0.3-dctcp.csv.processed -a 1 -u 5 -s $sram >> experiment_dctcp_03_64.txt
     bin/driver -f trace-100G-0.3-dctcp.csv.processed -a 2 -u 5 -s $sram >> experiment_dctcp_03_64.txt
     bin/driver -f trace-100G-0.3-dctcp.csv.processed -a 3 -u 5 -s $sram >> experiment_dctcp_03_64.txt
+    bin/driver -f trace-100G-0.3-dctcp.csv.processed -a 4 -u 5 -s $sram >> experiment_dctcp_03_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -265,6 +275,7 @@ do
     bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 1 -u 5 -s $sram >> experiment_dctcp_06_64.txt
     bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 2 -u 5 -s $sram >> experiment_dctcp_06_64.txt
     bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 3 -u 5 -s $sram >> experiment_dctcp_06_64.txt
+    bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 4 -u 5 -s $sram >> experiment_dctcp_06_64.txt
 done
 
 echo "Seer and Belady cases"
@@ -289,6 +300,7 @@ do
     bin/driver -f trace-100G-0.9-dctcp.csv.processed -a 1 -u 5 -s $sram >> experiment_dctcp_09_64.txt
     bin/driver -f trace-100G-0.9-dctcp.csv.processed -a 2 -u 5 -s $sram >> experiment_dctcp_09_64.txt
     bin/driver -f trace-100G-0.9-dctcp.csv.processed -a 3 -u 5 -s $sram >> experiment_dctcp_09_64.txt
+    bin/driver -f trace-100G-0.9-dctcp.csv.processed -a 4 -u 5 -s $sram >> experiment_dctcp_09_64.txt
 done
 
 echo "Seer and Belady cases"
