@@ -852,9 +852,12 @@ void free_arc_sram(arc_sram_t * sram) {
 }
 
 void free_s3f_queue(s3f_queue_t * fifo) {
-    for (int i = fifo->tail; i % fifo->size < fifo->head; i++) {
-        free(fifo->data[i % fifo->size]);
+    if (fifo->size > 0) {
+        for (int i = fifo->tail; i % fifo->size < fifo->head; i++) {
+            free(fifo->data[i % fifo->size]);
+        }
     }
+    
     free(fifo->data);
     free(fifo);
 }
