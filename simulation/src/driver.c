@@ -24,7 +24,7 @@ int num_datapoints = 100000;
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAMs
 int program_tors = 1; // Value of 1 = ToRs are programmable
-int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM, 3: ARC SRAM
+int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM, 3: ARC SRAM, 4: S3-FIFO SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 1; // Number of packets to send in a burst
 int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst mode
@@ -110,6 +110,9 @@ void work_per_timeslot()
                     else if (sram_type == 3) {
                         pull_from_dram_arc(spine->arc_sram, spine->dram, spine->dram->accessing);
                     }
+                    else if (sram_type == 4) {
+                        pull_from_dram_s3f(spine->s3f_sram, spine->dram, spine->dram->accessing);
+                    }
                    
                     // printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
 
@@ -137,6 +140,9 @@ void work_per_timeslot()
                     }
                     else if (sram_type == 3) {
                         pull_from_dram_arc(tor->arc_sram, tor->dram, tor->dram->accessing);
+                    }
+                    else if (sram_type == 4) {
+                        pull_from_dram_s3f(tor->s3f_sram, tor->dram, tor->dram->accessing);
                     }
 
                     // printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
@@ -340,6 +346,9 @@ void work_per_timeslot()
                                 else if (sram_type == 3) {
                                     pull_from_dram_arc(spine->arc_sram, spine->dram, flow->flow_id);
                                 }
+                                else if (sram_type == 4) {
+                                    pull_from_dram_s3f(spine->s3f_sram, spine->dram, flow->flow_id);
+                                }
                                 else {
                                     dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
                                 }
@@ -354,6 +363,9 @@ void work_per_timeslot()
                                 }
                                 else if (sram_type == 3) {
                                     pull_from_dram_arc(tor->arc_sram, tor->dram, flow->flow_id);
+                                }
+                                else if (sram_type == 4) {
+                                    pull_from_dram_s3f(tor->s3f_sram, tor->dram, flow->flow_id);
                                 }
                                 else {
                                     dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
@@ -1158,6 +1170,9 @@ void process_args(int argc, char ** argv) {
                 else if (sram_type == 3) {
                     printf("Using ARC SRAM\n");
                 }
+                else if (sram_type == 4) {
+                    printf("Using S3-FIFO SRAM\n");
+                }
                 break;
             case 'e':
                 enable_sram = atoi(optarg);
@@ -1175,12 +1190,20 @@ void process_args(int argc, char ** argv) {
                     spines[i]->sram->capacity = sram_size;
                     spines[i]->lfu_sram->capacity = sram_size;
                     spines[i]->arc_sram->capacity = sram_size;
+                    spines[i]->s3f_sram->capacity = sram_size;
+                    spines[i]->s3f_sram->s_fifo->size = sram_size / 10;
+                    spines[i]->s3f_sram->m_fifo->size = sram_size - sram_size / 10;
+                    spines[i]->s3f_sram->g_fifo->size = sram_size - sram_size / 10;
                     spines[i]->dm_sram->capacity = sram_size;
                 }
                 for (int i = 0; i < NUM_OF_RACKS; i++) {
                     tors[i]->sram->capacity = sram_size;
                     tors[i]->lfu_sram->capacity = sram_size;
                     tors[i]->arc_sram->capacity = sram_size;
+                    tors[i]->s3f_sram->capacity = sram_size;
+                    tors[i]->s3f_sram->s_fifo->size = sram_size / 10;
+                    tors[i]->s3f_sram->m_fifo->size = sram_size - sram_size / 10;
+                    tors[i]->s3f_sram->g_fifo->size = sram_size - sram_size / 10;
                     tors[i]->dm_sram->capacity = sram_size;
                 }
                 break;
@@ -1190,10 +1213,16 @@ void process_args(int argc, char ** argv) {
                     printf("Initializing SRAM\n");
                     for (int i = 0; i < NUM_OF_SPINES; i++) {
                         initialize_sram(spines[i]->sram);
+                        initialize_lfu_sram(spines[i]->lfu_sram);
+                        initialize_arc_sram(spines[i]->arc_sram);
+                        initialize_s3f_sram(spines[i]->s3f_sram);
                         initialize_dm_sram(spines[i]->dm_sram);
                     }
                     for (int i = 0; i < NUM_OF_RACKS; i++) {
                         initialize_sram(tors[i]->sram);
+                        initialize_lfu_sram(tors[i]->lfu_sram);
+                        initialize_arc_sram(tors[i]->arc_sram);
+                        initialize_s3f_sram(tors[i]->s3f_sram);
                         initialize_dm_sram(tors[i]->dm_sram);
                     }
                 }

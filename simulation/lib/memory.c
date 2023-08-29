@@ -495,7 +495,7 @@ int64_t evict_from_s3f_sram_s(s3f_sram_t * sram, dram_t * dram) {
         if (t->frequency > 1) {
             // If M FIFO is full, evict an entry before inserting
             if ((m_fifo->head + 1) % m_fifo->size == m_fifo->tail) {
-                evict_from_s3f_sram_m(s3f_sram_t * sram, dram_t * dram);
+                evict_from_s3f_sram_m(sram, dram);
             }
             push_s3f_node(m_fifo, t);
         }
@@ -757,6 +757,22 @@ void print_arc_sram(arc_sram_t * sram) {
     printf("\n");
 }
 
+void print_s3f_sram(s3f_sram_t * sram) {
+    printf("Current sram state\n");
+    printf("S FIFO:\n");
+    for (int i = sram->s_fifo->tail; i % sram->s_fifo->size < sram->s_fifo->head; i++) {
+        printf("%d, %d || ", (int) sram->s_fifo->data[i % sram->s_fifo->size]->flow_id, (int) sram->s_fifo->data[i % sram->s_fifo->size]->val);
+    }
+    printf("M FIFO:\n");
+    for (int i = sram->m_fifo->tail; i % sram->m_fifo->size < sram->m_fifo->head; i++) {
+        printf("%d, %d || ", (int) sram->m_fifo->data[i % sram->m_fifo->size]->flow_id, (int) sram->m_fifo->data[i % sram->m_fifo->size]->val);
+    }
+    printf("G FIFO:\n");
+    for (int i = sram->g_fifo->tail; i % sram->g_fifo->size < sram->g_fifo->head; i++) {
+        printf("%d || ", (int) sram->g_fifo->data[i % sram->g_fifo->size]->flow_id);
+    }
+}
+
 void print_dm_sram(dm_sram_t * sram) {
     printf("Current sram state\n");
     for (int i = 0; i < sram->capacity; i++) {
@@ -832,6 +848,21 @@ void free_arc_sram(arc_sram_t * sram) {
     }
     free(sram->l1_cache);
     free(sram->l2_cache);
+    free(sram);
+}
+
+void free_s3f_queue(s3f_queue_t * fifo) {
+    for (int i = fifo->tail; i % fifo->size < fifo->head; i++) {
+        free(fifo->data[i % fifo->size]);
+    }
+    free(fifo->data);
+    free(fifo);
+}
+
+void free_s3f_sram(s3f_sram_t * sram) {
+    free_s3f_queue(sram->s_fifo);
+    free_s3f_queue(sram->m_fifo);
+    free_s3f_queue(sram->g_fifo);
     free(sram);
 }
 

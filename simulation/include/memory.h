@@ -142,6 +142,7 @@ int64_t reorganize_sram(sram_t * sram, buffer_t * buffer);
 void print_sram(sram_t * sram);
 void print_lfu_sram(lfu_sram_t * sram);
 void print_arc_sram(arc_sram_t * sram);
+void print_s3f_sram(s3f_sram_t * sram);
 void print_dm_sram(dm_sram_t * sram);
 
 int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len);
@@ -150,6 +151,8 @@ int64_t evict_belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_le
 void free_sram(sram_t * sram);
 void free_lfu_sram(lfu_sram_t * sram);
 void free_arc_sram(arc_sram_t * sram);
+void free_s3f_queue(s3f_queue_t * fifo);
+void free_s3f_sram(s3f_sram_t * sram);
 void free_dm_sram(dm_sram_t * sram);
 void free_dram(dram_t * dram);
 

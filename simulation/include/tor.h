@@ -27,6 +27,7 @@ struct tor {
     sram_t * sram;
     lfu_sram_t * lfu_sram;
     arc_sram_t * arc_sram;
+    s3f_sram_t * s3f_sram;
     dm_sram_t * dm_sram;
     dram_t * dram;
     //separate snapshot lists for each upstream and downstream port
