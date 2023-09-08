@@ -21,6 +21,7 @@ spine_t create_spine(int16_t spine_index, int32_t sram_size, int16_t init_sram)
     self->lfu_sram = create_lfu_sram(sram_size, init_sram);
     self->arc_sram = create_arc_sram(sram_size, init_sram);
     self->s3f_sram = create_s3f_sram(sram_size, init_sram);
+    self->sve_sram = create_sve_sram(sram_size, init_sram);
     self->dm_sram = create_dm_sram(sram_size, init_sram);
     self->dram = create_dram(DRAM_SIZE, DRAM_DELAY);
 
@@ -45,6 +46,7 @@ void free_spine(spine_t self)
         free_lfu_sram(self->lfu_sram);
         free_arc_sram(self->arc_sram);
         free_s3f_sram(self->s3f_sram);
+        free_sve_sram(self->sve_sram);
         free_dm_sram(self->dm_sram);
         free_dram(self->dram);
         free(self);
@@ -80,6 +82,9 @@ packet_t process_packets(spine_t spine, int16_t port, int64_t * cache_misses, in
         }
         else if (sram_type == 4) {
             val = access_s3f_sram(spine->s3f_sram, pkt->flow_id);
+        }
+        else if (sram_type == 5) {
+            val = access_sve_sram(spine->sve_sram, pkt->flow_id);
         }
         
         // Cache miss

@@ -12,6 +12,18 @@ do
     bin/driver -f trace_incast_144.csv.processed -a 4 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_memory_incast_1500.txt
 done
 
+echo "Seer and Belady cases"
+make clean
+make INCLUDE_SNAPSHOTS='"TRUE"'
+for sram in 16 32 48 64 80 96 112 128 144
+do
+    bin/driver -f trace_incast_144.csv.processed -a 1 -s $sram -i 1 -v 120 -x 5 -y 5 >> experiment_memory_incast_1500.txt
+    rm -r ./out/*.out
+    rm -r ./out/*.timeseries.csv
+    python scripts/belady.py -f ./out -n $sram -x 145 -s 1000 >> best_case_memory_incast_1500.txt
+    rm -r ./out/*.*
+done
+
 echo "Running All-to-All 1500B"
 
 for load in 0.6
@@ -27,6 +39,18 @@ do
         bin/driver -f trace_all_to_all_144.csv.processed -a 2 -s $sram -i 1 -u 5 -l $load >> experiment_memory_all_to_all_1500.txt
         bin/driver -f trace_all_to_all_144.csv.processed -a 3 -s $sram -i 1 -u 5 -l $load >> experiment_memory_all_to_all_1500.txt
         bin/driver -f trace_all_to_all_144.csv.processed -a 4 -s $sram -i 1 -u 5 -l $load >> experiment_memory_all_to_all_1500.txt
+    done
+
+    echo "Seer and Belady cases"
+    make clean
+    make INCLUDE_SNAPSHOTS='"TRUE"'
+    for sram in 144 288 432 576 720 864 1008 1152 1296 1440 1584 1728 1872 2016 2160 2304 2448
+    do
+        bin/driver -f trace_all_to_all_144.csv.processed -a 1 -s $sram -i 1 -u 5 -l $load >> experiment_memory_all_to_all_1500.txt
+        rm -r ./out/*.out
+        rm -r ./out/*.timeseries.csv
+        python scripts/belady.py -f ./out -n $sram -x 2449 -s 10000 >> best_case_memory_all_to_all_1500.txt
+        rm -r ./out/*.*
     done
 done
 
@@ -46,6 +70,18 @@ do
         bin/driver -f trace_permutation_144.csv.processed -a 3 -s $sram -i 1 -u 5 -l $load >> experiment_memory_permutation_1500.txt
         bin/driver -f trace_permutation_144.csv.processed -a 4 -s $sram -i 1 -u 5 -l $load >> experiment_memory_permutation_1500.txt
     done
+
+    echo "Seer and Belady cases"
+    make clean
+    make INCLUDE_SNAPSHOTS='"TRUE"'
+    for sram in 2 4 6 8 10 12 14 16
+    do
+        bin/driver -f trace_permutation.csv.processed -a 1 -s $sram -i 1 -u 5 -l $load >> experiment_memory_permutation_1500.txt
+        rm -r ./out/*.out
+        rm -r ./out/*.timeseries.csv
+        python scripts/belady.py -f ./out -n $sram -x 17 -s 10000 >> best_case_memory_permutation_1500.txt
+        rm -r ./out/*.*
+    done
 done
 
 echo "Load 0.6"
@@ -61,6 +97,18 @@ do
     bin/driver -f trace-100G-0.6-aditya.csv.processed -a 4 -u 5 -s $sram >> experiment_memory_aditya_06_1500.txt
 done
 
+echo "Seer and Belady cases"
+make clean
+make INCLUDE_SNAPSHOTS='"TRUE"'
+for sram in 1 2 3 4 5 6 7 8 9 10
+do
+    bin/driver -f trace-100G-0.6-aditya.csv.processed -a 1 -u 5 -s $sram >> experiment_memory_aditya_06_1500.txt
+    rm -r ./out/*.out
+    rm -r ./out/*.timeseries.csv
+    python scripts/belady.py -f ./out -n $sram -x 51 -s 10000 >> best_case_memory_aditya_06_1500.txt
+    rm -r ./out/*.*
+done
+
 echo "Running Datamining 1500B"
 echo "Load 0.6"
 
@@ -73,6 +121,18 @@ do
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 2 -u 5 -s $sram >> experiment_memory_datamining_06_1500.txt
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 3 -u 5 -s $sram >> experiment_memory_datamining_06_1500.txt
     bin/driver -f trace-100G-0.6-datamining.csv.processed -a 4 -u 5 -s $sram >> experiment_memory_datamining_06_1500.txt
+done
+
+echo "Seer and Belady cases"
+make clean
+make INCLUDE_SNAPSHOTS='"TRUE"'
+for sram in 1 2 3 4 5 6 7 8 9 10
+do
+    bin/driver -f trace-100G-0.6-datamining.csv.processed -a 1 -u 5 -s $sram >> experiment_memory_datamining_06_1500.txt
+    rm -r ./out/*.out
+    rm -r ./out/*.timeseries.csv
+    python scripts/belady.py -f ./out -n $sram -x 51 -s 10000 >> best_case_memory_datamining_06_1500.txt
+    rm -r ./out/*.*
 done
 
 echo "Load 0.9"
@@ -91,3 +151,14 @@ do
     bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 3 -u 5 -s $sram >> experiment_memory_dctcp_06_1500.txt
     bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 4 -u 5 -s $sram >> experiment_memory_dctcp_06_1500.txt
 done
+
+echo "Seer and Belady cases"
+make clean
+make INCLUDE_SNAPSHOTS='"TRUE"'
+for sram in 1 2 3 4 5 6 7 8 9 10
+do
+    bin/driver -f trace-100G-0.6-dctcp.csv.processed -a 1 -u 5 -s $sram >> experiment_memory_dctcp_06_1500.txt
+    rm -r ./out/*.out
+    rm -r ./out/*.timeseries.csv
+    python scripts/belady.py -f ./out -n $sram -x 51 -s 10000 >> best_case_memory_dctcp_06_1500.txt
+    rm -r ./o

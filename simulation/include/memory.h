@@ -73,6 +73,21 @@ typedef struct s3f_sram {
     s3f_queue_t * g_fifo; // Ghost (G) FIFO queue
 } s3f_sram_t;
 
+// SIEVE SRAM
+typedef struct sve_node {
+    int64_t flow_id;
+    int64_t val;
+    int visited;
+} sve_node_t;
+
+typedef struct sve_sram {
+    int32_t capacity; // Max capacity SRAM
+    int head;
+    int tail;
+    int hand;
+    sve_node_t ** fifo;
+} sve_sram_t;
+
 typedef struct dram {
     int32_t delay;
     int32_t accesses;
@@ -94,6 +109,8 @@ arc_sram_t * create_arc_sram(int32_t size, int16_t initialize);
 s3f_node_t * create_s3f_node(int64_t flow_id, int64_t val);
 s3f_queue_t * create_s3f_queue(int size);
 s3f_sram_t * create_s3f_sram(int32_t size, int16_t initialize);
+sve_node_t * create_sve_node(int64_t flow_id, int64_t val);
+sve_sram_t * create_sve_sram(int32_t size, int16_t initialize);
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize);
 dram_t * create_dram(int32_t size, int32_t delay);
 
@@ -109,13 +126,17 @@ arc_node_t * remove_L2_arc_node(arc_sram_t * sram, int index);
 void reinsert_L1_arc_node(arc_sram_t * sram, int index);
 void reinsert_L2_arc_node(arc_sram_t * sram, int index);
 
-void push_s3f_node(s3f_queue_t * fifo, s3f_node_t * node);
+int push_s3f_node(s3f_queue_t * fifo, s3f_node_t * node);
 s3f_node_t * pop_s3f_node(s3f_queue_t * fifo);
+
+int push_sve_node(sve_sram_t * sram, sve_node_t * node);
+sve_node_t * remove_sve_node(sve_sram_t * sram, int index);
 
 void initialize_sram(sram_t * sram);
 void initialize_lfu_sram(lfu_sram_t * sram);
 void initialize_arc_sram(arc_sram_t * sram);
 void initialize_s3f_sram(s3f_sram_t * sram);
+void initialize_sve_sram(sve_sram_t * sram);
 void initialize_dm_sram(dm_sram_t * dm_sram);
 
 int64_t evict_from_sram(sram_t * sram, dram_t * dram);
@@ -123,15 +144,18 @@ int64_t evict_from_lfu_sram(lfu_sram_t * sram, dram_t * dram);
 int64_t evict_from_arc_sram(arc_sram_t * sram, dram_t * dram);
 int64_t evict_from_s3f_sram_s(s3f_sram_t * sram, dram_t * dram);
 int64_t evict_from_s3f_sram_m(s3f_sram_t * sram, dram_t * dram);
+int64_t evict_from_sve_sram(sve_sram_t * sram, dram_t * dram);
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t pull_from_dram_lfu(lfu_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t pull_from_dram_arc(arc_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t pull_from_dram_s3f(s3f_sram_t * sram, dram_t * dram, int64_t flow_id);
+int64_t pull_from_dram_sve(sve_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t access_sram(sram_t * sram, int64_t flow_id);
 int64_t access_sram_return_index(sram_t * sram, int64_t flow_id);
 int64_t access_lfu_sram(lfu_sram_t * sram, int64_t flow_id);
 int64_t access_arc_sram(arc_sram_t * sram, int64_t flow_id);
 int64_t access_s3f_sram(s3f_sram_t * sram, int64_t flow_id);
+int64_t access_sve_sram(sve_sram_t * sram, int64_t flow_id);
 
 int64_t evict_from_dm_sram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
 int64_t dm_pull_from_dram(dm_sram_t * sram, dram_t * dram, int64_t flow_id);
@@ -143,6 +167,7 @@ void print_sram(sram_t * sram);
 void print_lfu_sram(lfu_sram_t * sram);
 void print_arc_sram(arc_sram_t * sram);
 void print_s3f_sram(s3f_sram_t * sram);
+void pritn_sve_sram(sve_sram_t * sram);
 void print_dm_sram(dm_sram_t * sram);
 
 int64_t belady(sram_t * sram, dram_t * dram, int64_t * lin_queue, int q_len);
@@ -153,6 +178,7 @@ void free_lfu_sram(lfu_sram_t * sram);
 void free_arc_sram(arc_sram_t * sram);
 void free_s3f_queue(s3f_queue_t * fifo);
 void free_s3f_sram(s3f_sram_t * sram);
+void free_sve_sram(sve_sram_t * sram);
 void free_dm_sram(dm_sram_t * sram);
 void free_dram(dram_t * dram);
 

@@ -24,7 +24,7 @@ int num_datapoints = 100000;
 int enable_sram = 1; // Value of 1 = Enable SRAM usage
 int init_sram = 0; // Value of 1 = initialize SRAMs
 int program_tors = 1; // Value of 1 = ToRs are programmable
-int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM, 3: ARC SRAM, 4: S3-FIFO SRAM
+int sram_type = 1; // 0: Direct-mapped SRAM, 1: LRU SRAM, 2: LFU SRAM, 3: ARC SRAM, 4: S3-FIFO SRAM, 5: SIEVE SRAM
 int64_t sram_size = (int64_t) SRAM_SIZE;
 int burst_size = 1; // Number of packets to send in a burst
 int packet_mode = 0; // 0: Full network bandwidth mode, 1: incast mode, 2: burst mode
@@ -50,14 +50,14 @@ static volatile int8_t terminate4 = 0;
 static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
-int64_t num_of_flows_to_finish = 5000; //stop after these many flows finish
+int64_t num_of_flows_to_finish = MAX_FLOW_ID; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
-int64_t num_of_flows_to_start = 50000; //stop after these many flows start
+int64_t num_of_flows_to_start = MAX_FLOW_ID; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
-volatile int64_t max_bytes_rcvd = 10000000;
+volatile int64_t max_bytes_rcvd = 1000000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -113,6 +113,9 @@ void work_per_timeslot()
                     else if (sram_type == 4) {
                         pull_from_dram_s3f(spine->s3f_sram, spine->dram, spine->dram->accessing);
                     }
+                    else if (sram_type == 5) {
+                        pull_from_dram_sve(spine->sve_sram, spine->dram, spine->dram->accessing);
+                    }
                    
                     // printf("%d: Spine %d pulled id %d to index %d\n", (int) curr_timeslot, i, spine->dram->accessing, spine->dram->placement_idx);
 
@@ -143,6 +146,9 @@ void work_per_timeslot()
                     }
                     else if (sram_type == 4) {
                         pull_from_dram_s3f(tor->s3f_sram, tor->dram, tor->dram->accessing);
+                    }
+                    else if (sram_type == 5) {
+                        pull_from_dram_sve(tor->sve_sram, tor->dram, tor->dram->accessing);
                     }
 
                     // printf("%d: ToR %d pulled id %d to index %d\n", (int) curr_timeslot, i, tor->dram->accessing, tor->dram->placement_idx);
@@ -349,6 +355,9 @@ void work_per_timeslot()
                                 else if (sram_type == 4) {
                                     pull_from_dram_s3f(spine->s3f_sram, spine->dram, flow->flow_id);
                                 }
+                                else if (sram_type == 5) {
+                                    pull_from_dram_sve(spine->sve_sram, spine->dram, flow->flow_id);
+                                }
                                 else {
                                     dm_pull_from_dram(spine->dm_sram, spine->dram, flow->flow_id);
                                 }
@@ -366,6 +375,9 @@ void work_per_timeslot()
                                 }
                                 else if (sram_type == 4) {
                                     pull_from_dram_s3f(tor->s3f_sram, tor->dram, flow->flow_id);
+                                }
+                                else if (sram_type == 5) {
+                                    pull_from_dram_sve(tor->sve_sram, tor->dram, flow->flow_id);
                                 }
                                 else {
                                     dm_pull_from_dram(tor->dm_sram, tor->dram, flow->flow_id);
@@ -1072,6 +1084,7 @@ void work_per_timeslot()
             printf("Finished in %d timeslots\n", (int) curr_timeslot);
             printf("Finished in %f seconds\n", curr_time);
             printf("Finished in %d bytes\n", total_bytes_rcvd);
+            fflush(stdout);
             break;
         }
 
@@ -1173,6 +1186,9 @@ void process_args(int argc, char ** argv) {
                 else if (sram_type == 4) {
                     printf("Using S3-FIFO SRAM\n");
                 }
+                else if (sram_type == 5) {
+                    printf("Using SIEVE SRAM\n");
+                }
                 break;
             case 'e':
                 enable_sram = atoi(optarg);
@@ -1194,6 +1210,7 @@ void process_args(int argc, char ** argv) {
                     spines[i]->s3f_sram->s_fifo->size = sram_size / 10;
                     spines[i]->s3f_sram->m_fifo->size = sram_size - sram_size / 10;
                     spines[i]->s3f_sram->g_fifo->size = sram_size - sram_size / 10;
+                    spines[i]->sve_sram->capacity = sram_size;
                     spines[i]->dm_sram->capacity = sram_size;
                 }
                 for (int i = 0; i < NUM_OF_RACKS; i++) {
@@ -1204,6 +1221,7 @@ void process_args(int argc, char ** argv) {
                     tors[i]->s3f_sram->s_fifo->size = sram_size / 10;
                     tors[i]->s3f_sram->m_fifo->size = sram_size - sram_size / 10;
                     tors[i]->s3f_sram->g_fifo->size = sram_size - sram_size / 10;
+                    tors[i]->sve_sram->capacity = sram_size;
                     tors[i]->dm_sram->capacity = sram_size;
                 }
                 break;
@@ -1216,6 +1234,7 @@ void process_args(int argc, char ** argv) {
                         initialize_lfu_sram(spines[i]->lfu_sram);
                         initialize_arc_sram(spines[i]->arc_sram);
                         initialize_s3f_sram(spines[i]->s3f_sram);
+                        initialize_sve_sram(spines[i]->sve_sram);
                         initialize_dm_sram(spines[i]->dm_sram);
                     }
                     for (int i = 0; i < NUM_OF_RACKS; i++) {
@@ -1223,6 +1242,7 @@ void process_args(int argc, char ** argv) {
                         initialize_lfu_sram(tors[i]->lfu_sram);
                         initialize_arc_sram(tors[i]->arc_sram);
                         initialize_s3f_sram(tors[i]->s3f_sram);
+                        initialize_sve_sram(tors[i]->sve_sram);
                         initialize_dm_sram(tors[i]->dm_sram);
                     }
                 }

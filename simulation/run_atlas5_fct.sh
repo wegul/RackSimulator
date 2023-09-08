@@ -1,4 +1,5 @@
 echo "Running Aditya 64B"
+echo "Running Aditya 64B"
 
 echo "Load 0.3"
 

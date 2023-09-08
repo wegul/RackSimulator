@@ -168,7 +168,7 @@ void reinsert_L2_arc_node(arc_sram_t * sram, int index) {
     sram->l2_cache[0] = node;
 }
 
-void push_s3f_node(s3f_queue_t * fifo, s3f_node_t * node) {
+int push_s3f_node(s3f_queue_t * fifo, s3f_node_t * node) {
     int next;
 
     // Determine where node will be pushed
@@ -181,6 +181,11 @@ void push_s3f_node(s3f_queue_t * fifo, s3f_node_t * node) {
     if (next != fifo->tail) {
         fifo->data[fifo->head] = node;
         fifo->head = next;
+        return 0;
+    }
+    else {
+        free(node);
+        return -1;
     }
 }
 
@@ -203,6 +208,38 @@ s3f_node_t * pop_s3f_node(s3f_queue_t * fifo) {
     return node;
 }
     
+int push_sve_node(sve_sram_t * sram, sve_node_t * node) {
+    sve_node_t ** fifo = sram->fifo;
+    int next = sram->head + 1;
+    if (next >= sram->capacity) {
+        next = 0;
+    }
+
+    if (next != sram->tail) {
+        fifo[sram->head] = node;
+        sram->head = next;
+        return 0;
+    }
+    else {
+        free(node);
+        return -1;
+    }
+}
+
+sve_node_t * remove_sve_node(sve_sram_t * sram, int index) {
+    sve_node_t * node = sram->fifo[index];
+    if (node == NULL) {
+        return NULL;
+    }
+
+    for (int i = index; ((i + sram->capacity) % sram->capacity) != sram->tail; i--) {
+        sram->fifo[((i + sram->capacity) % sram->capacity)] = sram->fifo[((i - 1 + sram->capacity) % sram->capacity)];
+    }
+    sram->fifo[sram->tail] = NULL;
+    sram->tail = (sram->tail + 1) % sram->capacity;
+    
+    return node;
+}
 
 sram_t * create_sram(int32_t size, int16_t initialize) {
     sram_t * sram = malloc(sizeof(sram_t));
@@ -312,6 +349,36 @@ s3f_sram_t * create_s3f_sram(int32_t size, int16_t initialize) {
     return sram;
 }
 
+sve_node_t * create_sve_node(int64_t flow_id, int64_t val) {
+    sve_node_t * node = malloc(sizeof(sve_node_t));
+    MALLOC_TEST(node, __LINE__);
+    node->flow_id = flow_id;
+    node->val = val;
+    node->visited = 0;
+
+    return node;
+}
+
+sve_sram_t * create_sve_sram(int32_t size, int16_t initialize) {
+    sve_sram_t  * sram = malloc(sizeof(sve_sram_t));
+    sram->capacity = size;
+
+    sram->head = 0;
+    sram->tail = 0;
+    sram->hand = 0;
+    sram->fifo = malloc(sizeof(sve_node_t *) * size);
+
+    for (int i = 0; i < size; i++) {
+        sram->fifo[i] = NULL;
+    }
+
+    if (initialize == 1) {
+        initialize_sve_sram(sram);
+    }
+
+    return sram;
+}
+ 
 dm_sram_t * create_dm_sram(int32_t size, int16_t initialize) {
     dm_sram_t * sram = malloc(sizeof(dm_sram_t));
     MALLOC_TEST(sram, __LINE__);
@@ -390,6 +457,13 @@ void initialize_s3f_sram(s3f_sram_t * sram) {
         else {
             push_s3f_node(sram->m_fifo, node);
         }
+    }
+}
+
+void initialize_sve_sram(sve_sram_t * sram) {
+    for(int i = 0; i < sram->capacity; i++) {
+        sve_node_t * node = create_sve_node(i, 0);
+        push_sve_node(sram, node);
     }
 }
 
@@ -526,12 +600,23 @@ int64_t evict_from_s3f_sram_m(s3f_sram_t * sram, dram_t * dram) {
             t->frequency--;
         }
         else {
-            int flow_id = t->flow_id;
+            int64_t flow_id = t->flow_id;
             dram->memory[flow_id % DRAM_SIZE] = t->val;
             free(t);
             return flow_id;
         }
     }
+}
+
+int64_t evict_from_sve_sram(sve_sram_t * sram, dram_t * dram) {
+    sve_node_t * node = remove_sve_node(sram, sram->hand);
+    if (node == NULL) {
+        return -1;
+    }
+    int64_t flow_id = node->flow_id;
+    dram->memory[flow_id % DRAM_SIZE] = node->val;
+    free(node);
+    return flow_id;
 }
 
 int64_t pull_from_dram(sram_t * sram, dram_t * dram, int64_t flow_id) {
@@ -568,7 +653,7 @@ int64_t pull_from_dram_arc(arc_sram_t * sram, dram_t * dram, int64_t flow_id) {
 int64_t pull_from_dram_s3f(s3f_sram_t * sram, dram_t * dram, int64_t flow_id) {
     s3f_node_t * node = create_s3f_node(flow_id, dram->memory[flow_id]);
     node->frequency++;
-    if (sram->s_fifo->head == sram->s_fifo->tail) {
+    if ((sram->s_fifo->head + 1) % sram->s_fifo->size == sram->s_fifo->tail) {
         evict_from_s3f_sram_s(sram, dram);
     }
     // Determine if flow id is in ghost queue
@@ -579,12 +664,48 @@ int64_t pull_from_dram_s3f(s3f_sram_t * sram, dram_t * dram, int64_t flow_id) {
             break;
         }
     }
+    int push_result = -1;
     if (is_in_g_fifo) {
-        push_s3f_node(sram->m_fifo, node);
+        push_result = push_s3f_node(sram->m_fifo, node);
     }
     else {
-        push_s3f_node(sram->s_fifo, node);
+        push_result = push_s3f_node(sram->s_fifo, node);
     }
+    if (push_result == -1) {
+        return -1;
+    }
+    return node->val;
+}
+
+int64_t pull_from_dram_sve(sve_sram_t * sram, dram_t * dram, int64_t flow_id) {
+    // If SRAM is full
+    if ((sram->head + 1) % sram->capacity == sram->tail) {
+        int curr = sram->hand;
+        sve_node_t * node = sram->fifo[curr];
+        if (node == NULL) {
+            curr = sram->tail;
+            node = sram->fifo[curr];
+        }
+        while (node->visited == 1) {
+            node->visited = 0;
+            curr++;
+            curr %= sram->capacity;
+            node = sram->fifo[curr];
+            if (node == NULL) {
+                curr = sram->tail;
+                node = sram->fifo[curr];
+            }
+        }
+        sram->hand = curr;
+        evict_from_sve_sram(sram, dram);
+        sram->hand++;
+        sram->hand %= sram->capacity;
+    }
+
+    // Insert x to head of T
+    sve_node_t * node = create_sve_node(flow_id, dram->memory[flow_id]);
+    push_sve_node(sram, node);
+
     return node->val;
 }
 
@@ -663,7 +784,7 @@ int64_t access_arc_sram(arc_sram_t * sram, int64_t flow_id) {
 
 int64_t access_s3f_sram(s3f_sram_t * sram, int64_t flow_id) {
     // Check S FIFO
-    for (int i = sram->s_fifo->tail; i % sram->s_fifo->size < sram->s_fifo->head; i++) {
+    for (int i = sram->s_fifo->tail; i % sram->s_fifo->size != sram->s_fifo->head; i++) {
         // Cache hit
         s3f_node_t * node = sram->s_fifo->data[i % sram->s_fifo->size];
         if (node->flow_id == flow_id) {
@@ -671,11 +792,12 @@ int64_t access_s3f_sram(s3f_sram_t * sram, int64_t flow_id) {
             if (node->frequency > 3) {
                 node->frequency = 3;
             }
+            node->val++;
             return node->val;
         }
     }
     // Check M FIFO
-    for (int i = sram->m_fifo->tail; i % sram->m_fifo->size < sram->m_fifo->head; i++) {
+    for (int i = sram->m_fifo->tail; i % sram->m_fifo->size != sram->m_fifo->head; i++) {
         // Cache hit
         s3f_node_t * node = sram->m_fifo->data[i % sram->m_fifo->size];
         if (node->flow_id == flow_id) {
@@ -683,6 +805,24 @@ int64_t access_s3f_sram(s3f_sram_t * sram, int64_t flow_id) {
             if (node->frequency > 3) {
                 node->frequency = 3;
             }
+            node->val++;
+            return node->val;
+        }
+    }
+    // Cache miss
+    return -1;
+}
+
+int64_t access_sve_sram(sve_sram_t * sram, int64_t flow_id) {
+    for (int i = sram->tail; (i  % sram->capacity) != sram->head; i++) {
+        // Cache hit
+        sve_node_t * node = sram->fifo[i % sram->capacity];
+        if (node == NULL) {
+            return -1;
+        }
+        if (node->flow_id == flow_id) {
+            node->visited = 1;
+            node->val++;
             return node->val;
         }
     }
@@ -760,17 +900,26 @@ void print_arc_sram(arc_sram_t * sram) {
 void print_s3f_sram(s3f_sram_t * sram) {
     printf("Current sram state\n");
     printf("S FIFO:\n");
-    for (int i = sram->s_fifo->tail; i % sram->s_fifo->size < sram->s_fifo->head; i++) {
-        printf("%d, %d || ", (int) sram->s_fifo->data[i % sram->s_fifo->size]->flow_id, (int) sram->s_fifo->data[i % sram->s_fifo->size]->val);
+    for (int i = sram->s_fifo->tail; i % sram->s_fifo->size != sram->s_fifo->head; i++) {
+        printf("%d, %d (%d) || ", (int) sram->s_fifo->data[i % sram->s_fifo->size]->flow_id, (int) sram->s_fifo->data[i % sram->s_fifo->size]->val, (int) sram->s_fifo->data[i % sram->s_fifo->size]->frequency);
     }
-    printf("M FIFO:\n");
-    for (int i = sram->m_fifo->tail; i % sram->m_fifo->size < sram->m_fifo->head; i++) {
-        printf("%d, %d || ", (int) sram->m_fifo->data[i % sram->m_fifo->size]->flow_id, (int) sram->m_fifo->data[i % sram->m_fifo->size]->val);
+    printf("\nM FIFO:\n");
+    for (int i = sram->m_fifo->tail; i % sram->m_fifo->size != sram->m_fifo->head; i++) {
+        printf("%d, %d || ", (int) sram->m_fifo->data[i % sram->m_fifo->size]->flow_id, (int) sram->m_fifo->data[i % sram->m_fifo->size]->val, (int) sram->m_fifo->data[i % sram->m_fifo->size]->frequency);
     }
-    printf("G FIFO:\n");
-    for (int i = sram->g_fifo->tail; i % sram->g_fifo->size < sram->g_fifo->head; i++) {
+    printf("\nG FIFO:\n");
+    for (int i = sram->g_fifo->tail; i % sram->g_fifo->size != sram->g_fifo->head; i++) {
         printf("%d || ", (int) sram->g_fifo->data[i % sram->g_fifo->size]->flow_id);
     }
+    printf("\n");
+}
+
+void print_sve_sram(sve_sram_t * sram) {
+    printf("Current sram state\n");
+    for (int i = sram->tail; (i % sram->capacity) != sram->head; i++) {
+        printf("%d, %d (%d) || ", (int) sram->fifo[i % sram->capacity]->flow_id, (int) sram->fifo[i % sram->capacity]->val, (int) sram->fifo[i % sram->capacity]->visited);
+    }
+    printf("\n");
 }
 
 void print_dm_sram(dm_sram_t * sram) {
@@ -853,7 +1002,7 @@ void free_arc_sram(arc_sram_t * sram) {
 
 void free_s3f_queue(s3f_queue_t * fifo) {
     if (fifo->size > 0) {
-        for (int i = fifo->tail; i % fifo->size < fifo->head; i++) {
+        for (int i = fifo->tail; i % fifo->size != fifo->head; i++) {
             free(fifo->data[i % fifo->size]);
         }
     }
@@ -866,6 +1015,15 @@ void free_s3f_sram(s3f_sram_t * sram) {
     free_s3f_queue(sram->s_fifo);
     free_s3f_queue(sram->m_fifo);
     free_s3f_queue(sram->g_fifo);
+    free(sram);
+}
+
+void free_sve_sram(sve_sram_t * sram) {
+    for (int i = sram->tail; i % sram->capacity != sram->head; i++) {
+        free(sram->fifo[i % sram->capacity]);
+    }
+
+    free(sram->fifo);
     free(sram);
 }
 
