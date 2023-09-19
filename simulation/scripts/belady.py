@@ -97,7 +97,6 @@ def main():
                                     cache_hits += 1
                                 else: # cache miss
                                     if not sram_lock:
-                                        #cache_hits -= 1 # to make up for subsequent "cache hit" when it is brought up to memory
                                         cache_misses += 1
                                         sram_lock = 1 # lock SRAM
                                         dram_accessing = port_queues[p][0] # flow ID that has cache missed

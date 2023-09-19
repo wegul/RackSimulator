@@ -20,6 +20,7 @@ typedef struct flow {
     int64_t pkts_received;
     int64_t bytes_sent;
     int64_t bytes_received;
+    int64_t expected_runtime;
 } flow_t;
 
 flow_t * create_flow(int64_t, int64_t, int64_t, int16_t, int16_t, int64_t);

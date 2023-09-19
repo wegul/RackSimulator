@@ -18,6 +18,7 @@ flow_t * create_flow(int64_t flow_id, int64_t flow_size, int64_t flow_size_bytes
     self->pkts_received = 0;
     self->bytes_sent = 0;
     self->bytes_received = 0;
+    self->expected_runtime = 0;
 
     return self;
 }

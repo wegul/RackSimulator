@@ -50,14 +50,14 @@ static volatile int8_t terminate4 = 0;
 static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; //extern var
-int64_t num_of_flows_to_finish = MAX_FLOW_ID; //stop after these many flows finish
+int64_t num_of_flows_to_finish = 1000; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
 int64_t num_of_flows_to_start = MAX_FLOW_ID; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
-volatile int64_t max_bytes_rcvd = 1000000;
+volatile int64_t max_bytes_rcvd = 100000000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -906,6 +906,7 @@ void work_per_timeslot()
                         flow->finish_timeslot = curr_timeslot;
                         num_of_flows_finished++;
                         write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
+                        printf("%d flows finished\n", num_of_flows_finished);
                         printf("%d: Flow %d finished in %d timeslots\n", (int) curr_timeslot, (int) flow->flow_id, (int) (flow->finish_timeslot - flow->timeslot));
                         fflush(stdout);
 #ifdef DEBUG_DRIVER
@@ -1044,6 +1045,10 @@ void work_per_timeslot()
         //     terminate4 = 1;
         // }
 
+        // if (curr_timeslot % 100000 == 99999) {
+        //     printf("%d: %d bytes received\n", curr_timeslot, total_bytes_rcvd);
+        // }
+
         if (total_bytes_rcvd >= max_bytes_rcvd) {
             printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
             terminate5 = 1;
@@ -1052,12 +1057,16 @@ void work_per_timeslot()
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
             int completed_flows = 0;
             int flow_completion_times[flowlist->num_flows];
+            int slowdowns[flowlist->num_flows];
+            float avg_slowdown = 0;
             printf("FCT: ");
             for (int i = 0; i < flowlist->num_flows; i++) {
                 if (flowlist->flows[i]->finished > 0) {
                     printf("%d, ", flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot);
                     flow_completion_times[completed_flows] = flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
                     avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
+                    slowdowns[completed_flows] = flow_completion_times[completed_flows] / flowlist->flows[i]->expected_runtime;
+                    avg_slowdown += slowdowns[completed_flows];
                     completed_flows++;
                 }
             }
@@ -1069,13 +1078,17 @@ void work_per_timeslot()
 
             if (completed_flows > 0) {
                 avg_flow_completion_time /= completed_flows;
+                avg_slowdown /= completed_flows;
                 int pct99 = (completed_flows * 99 + 99) / 100;
                 pct99fct = flow_completion_times[pct99 - 1];
                 int pct50 = (completed_flows * 50) / 100;
                 medfct = flow_completion_times[pct50 - 1];
             }
 
+            avg_slowdown -= 1;
+
             printf("Avg flow completion time: %0.3f\n", avg_flow_completion_time);
+            printf("Avg slowdown: %0.3f\n", avg_slowdown);
             printf("Median flow completion time: %d\n", medfct);
             printf("99th %%ile FCT: %d\n", pct99fct);
             printf("Flows completed: %d\n", completed_flows);
@@ -1095,6 +1108,7 @@ void work_per_timeslot()
         //     printf(".\n");
         // }
 
+        fflush(stdout);
         curr_timeslot++;
     }
     printf("\nSimulation Ended\n");
@@ -1375,6 +1389,7 @@ void read_tracefile(char * filename) {
 void initialize_flow(int flow_id, int src, int dst, int flow_size_pkts, int flow_size_bytes, int timeslot) {
     if (flow_id < MAX_FLOW_ID) {
         flow_t * new_flow = create_flow(flow_id, flow_size_pkts, flow_size_bytes, src, dst, timeslot);
+        new_flow->expected_runtime = flow_size_bytes / MTU + 6;
         add_flow(flowlist, new_flow);
 #ifdef DEBUG_DRIVER
         printf("initialized flow %d src %d dst %d flow_size %d bytes %d ts %d\n", flow_id, src, dst, flow_size_pkts, flow_size_bytes, timeslot);

@@ -1,36 +1,17 @@
-while getopts f:a:l:u: flag
-do
-    case "${flag}" in
-        f) filename=${OPTARG};;
-        l) load=${OPTARG};;
-        u) burst=${OPTARG};;
-    esac
-done
 
+echo "Baseline cases"
 make clean
 make all
 
-bin/driver -f $filename -a 1 -u $burst -s 10
-bin/driver -f $filename -a 1 -u $burst -s 9
-bin/driver -f $filename -a 1 -u $burst -s 8
-bin/driver -f $filename -a 1 -u $burst -s 7
-bin/driver -f $filename -a 1 -u $burst -s 6
-bin/driver -f $filename -a 1 -u $burst -s 5
-bin/driver -f $filename -a 1 -u $burst -s 4
-bin/driver -f $filename -a 1 -u $burst -s 3
-bin/driver -f $filename -a 1 -u $burst -s 2
-bin/driver -f $filename -a 1 -u $burst -s 1
+bin/driver -f trace-100G-0.6-datamining.csv.processed -a 1 -u 5 -s 2 > experiment_datamining_128.txt
 
+echo "Seer and Belady cases"
 make clean
 make INCLUDE_SNAPSHOTS='"TRUE"'
 
-bin/driver -f $filename -a 1 -u $burst -s 10
-bin/driver -f $filename -a 1 -u $burst -s 9
-bin/driver -f $filename -a 1 -u $burst -s 8
-bin/driver -f $filename -a 1 -u $burst -s 7
-bin/driver -f $filename -a 1 -u $burst -s 6
-bin/driver -f $filename -a 1 -u $burst -s 5
-bin/driver -f $filename -a 1 -u $burst -s 4
-bin/driver -f $filename -a 1 -u $burst -s 3
-bin/driver -f $filename -a 1 -u $burst -s 2
-bin/driver -f $filename -a 1 -u $burst -s 1
+bin/driver -f trace-100G-0.6-datamining.csv.processed -a 1 -u 5 -s 2 >> experiment_datamining_128.txt
+
+rm -r ./out/*.out
+rm -r ./out/*.timeseries.csv
+python scripts/belady.py -f ./out -n 2 -x 10 -s 10000 -d 9 > best_case_datamining_128.txt
+rm -r ./out/*.*
