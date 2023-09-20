@@ -57,7 +57,7 @@ int64_t num_of_flows_to_start = 1000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
-volatile int64_t max_bytes_rcvd = 100000000;
+volatile int64_t max_bytes_rcvd = 10000000;
 
 // Output files
 FILE * out_fp = NULL;
@@ -1049,10 +1049,10 @@ void work_per_timeslot()
         //     printf("%d: %d bytes received\n", curr_timeslot, total_bytes_rcvd);
         // }
 
-        // if (total_bytes_rcvd >= max_bytes_rcvd) {
-        //     printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
-        //     terminate5 = 1;
-        // }
+        if (total_bytes_rcvd >= max_bytes_rcvd) {
+            printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
+            terminate5 = 1;
+        }
 
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
             int completed_flows = 0;
