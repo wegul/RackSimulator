@@ -50,8 +50,8 @@ def graph_incast_cm_by_pktsize():
         print("Incast Cache Misses: Capacity = 20%")
 
         plt.xticks(ind+width, pktsize, rotation=30)
-        plt.ylim(0, 2.4)
-        plt.yticks(np.arange(0, 2.4, 0.2))
+        plt.ylim(0, 3.5)
+        plt.yticks(np.arange(0, 3.5, 0.5))
         plt.grid(axis='y', zorder=0)
         plt.legend((bar1, bar2, bar3), ("LRU", "Seer", "Belady"))
   
@@ -106,8 +106,8 @@ def graph_datamining_06_cm_by_pktsize():
         print("Datamining Cache Misses: Load = 0.6, SRAM Capacity = 20%")
 
         plt.xticks(ind+width, pktsize, rotation=30)
-        plt.ylim(0,2.4)
-        plt.yticks(np.arange(0,2.4,0.2))
+        plt.ylim(0,2)
+        plt.yticks(np.arange(0,2,0.2))
         plt.grid(axis='y', zorder=0)
         plt.legend((bar1, bar2, bar3), ("LRU", "Seer", "Belady"))
   
@@ -215,10 +215,10 @@ def graph_incast_64B_cm_by_sram():
         print("Incast Cache Misses: Packets = 64B")
 
         plt.xticks(ind+width, pct, rotation=30)
-        plt.yticks(np.arange(0,9000,1000))
+        plt.yticks(np.arange(0,4000,500))
 
         current_values = plt.gca().get_yticks()
-        plt.gca().set_yticklabels(["{:,.0f}K".format(x/1000) for x in current_values])
+        plt.gca().set_yticklabels(["{:,.1f}K".format(x/1000) for x in current_values])
         plt.grid(axis='y', zorder=0)
         plt.legend((bar1, bar2, bar3), ("LRU", "Seer", "Belady"))
   
@@ -248,6 +248,8 @@ def graph_incast_1500B_cm_by_sram():
         plt.xticks(ind+width, pct, rotation=30)
         plt.yticks(np.arange(0,5000,500))
 
+        current_values = plt.gca().get_yticks()
+        plt.gca().set_yticklabels(["{:,.1f}K".format(x/1000) for x in current_values])
         plt.grid(axis='y', zorder=0)
         plt.legend((bar1, bar2, bar3), ("LRU", "Seer", "Belady"))
   
@@ -275,7 +277,7 @@ def graph_websearch_06_64B_cm_by_sram():
         print("Websearch Cache Misses: Packets = 64B, Load = 0.6")
 
         plt.xticks(ind+width, pct, rotation=30)
-        plt.yticks(np.arange(0,8000,1000))
+        plt.yticks(np.arange(0,20000,2000))
 
         current_values = plt.gca().get_yticks()
         plt.gca().set_yticklabels(["{:,.0f}K".format(x/1000) for x in current_values])
@@ -306,7 +308,7 @@ def graph_websearch_06_1500B_cm_by_sram():
         print("Websearch Cache Misses: Packets = 1500B, Load = 0.6")
 
         plt.xticks(ind+width, pct, rotation=30)
-        plt.yticks(np.arange(0,18000,2000))
+        plt.yticks(np.arange(0,26000,2000))
 
         current_values = plt.gca().get_yticks()
         plt.gca().set_yticklabels(["{:,.0f}K".format(x/1000) for x in current_values])
