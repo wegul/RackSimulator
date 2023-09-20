@@ -6,7 +6,7 @@ static float link_bandwidth = 100; //in Gbps
 static float timeslot_len = 120; //in ns
 static int bytes_per_timeslot = 1500;
 #ifdef ENABLE_SNAPSHOTS
-static int snapshot_epoch = 9; //timeslots between snapshots
+static int snapshot_epoch = 1; //timeslots between snapshots
 static int belady_epoch = 1;
 static int belady_accesses = 1;
 #endif
@@ -53,7 +53,7 @@ volatile int64_t num_of_flows_finished = 0; //extern var
 int64_t num_of_flows_to_finish = 1000; //stop after these many flows finish
 
 volatile int64_t total_flows_started = 0; //extern var
-int64_t num_of_flows_to_start = MAX_FLOW_ID; //stop after these many flows start
+int64_t num_of_flows_to_start = 1000; //stop after these many flows start
 
 volatile int64_t max_timeslots = 20000; // extern var
 volatile int64_t max_cache_accesses = 200000;
@@ -1025,10 +1025,10 @@ void work_per_timeslot()
             }
         }
 
-        // if (total_flows_started >= num_of_flows_to_start) {
-        //     printf("\nStarted %d flows\n\n", (int) total_flows_started);
-        //     terminate1 = 1;
-        // }
+        if (total_flows_started >= num_of_flows_to_start) {
+            printf("\nStarted %d flows\n\n", (int) total_flows_started);
+            terminate1 = 1;
+        }
 
         if (num_of_flows_finished >= num_of_flows_to_finish) {
             printf("\nFinished %d flows\n\n", (int) num_of_flows_finished);
@@ -1049,10 +1049,10 @@ void work_per_timeslot()
         //     printf("%d: %d bytes received\n", curr_timeslot, total_bytes_rcvd);
         // }
 
-        if (total_bytes_rcvd >= max_bytes_rcvd) {
-            printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
-            terminate5 = 1;
-        }
+        // if (total_bytes_rcvd >= max_bytes_rcvd) {
+        //     printf("\nReached %d bytes received\n\n", max_bytes_rcvd);
+        //     terminate5 = 1;
+        // }
 
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5) {
             int completed_flows = 0;
