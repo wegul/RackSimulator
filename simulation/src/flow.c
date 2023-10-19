@@ -1,8 +1,10 @@
 #include "flow.h"
 
-flow_t * create_flow(int64_t flow_id, int64_t flow_size, int64_t flow_size_bytes, int16_t host_index, int16_t dst_index, int64_t timeslot) {
-    flow_t * self = (flow_t *) malloc(sizeof(flow_t));
+flow_t *create_flow(int64_t flow_id, int64_t flow_size, int64_t flow_size_bytes, int16_t host_index, int16_t dst_index, int64_t timeslot)
+{
+    flow_t *self = (flow_t *)malloc(sizeof(flow_t));
     MALLOC_TEST(self, __LINE__);
+    self->isMemFlow = 0;
     self->active = 0;
     self->finished = 0;
     self->flow_id = flow_id;
@@ -23,8 +25,10 @@ flow_t * create_flow(int64_t flow_id, int64_t flow_size, int64_t flow_size_bytes
     return self;
 }
 
-void free_flow(flow_t * self) {
-    if (self != NULL) {
+void free_flow(flow_t *self)
+{
+    if (self != NULL)
+    {
         free(self);
     }
 }
