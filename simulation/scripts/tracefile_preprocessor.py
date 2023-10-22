@@ -15,7 +15,8 @@ def main():
 
     filename = args.f
     slot_time = (float(args.c) * 8.0) / float(args.b)
-    usable_packet_size_bits = (int(args.c) - int(args.o)) * 8
+    eth_usable_packet_size_bits = 1400 * 8
+    mem_usable_packet_size_bits = 64*8
 
     inp = open(filename, 'r')
     out = open(filename+".processed", 'w')
@@ -24,7 +25,8 @@ def main():
         tokens = line.split(',')
         out.write(tokens[0].strip())
         out.write(',')
-        out.write(tokens[1].strip())
+        isMem = (int)(tokens[1].strip())
+        out.write(str(isMem))
         out.write(',')
         out.write(tokens[2].strip())
         out.write(',')
@@ -33,8 +35,12 @@ def main():
         flowsize = int(float(tokens[4].strip()))
         out.write(str(flowsize))
         out.write(',')
-        pkts = int(
-            math.ceil((float(tokens[4].strip())*8)/usable_packet_size_bits))
+        if isMem == 1:
+            pkts = int(math.floor((float(flowsize)*8) /
+                       (mem_usable_packet_size_bits)))
+        else:
+            pkts = int(math.floor((float(flowsize)*8) /
+                       (eth_usable_packet_size_bits)))
         out.write(str(pkts))
         out.write(',')
         timeslots = int(math.ceil((float(tokens[5].strip()) * 1e9)/slot_time))

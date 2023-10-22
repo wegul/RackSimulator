@@ -25,12 +25,9 @@ OBJ = $(OBJDIR)/arraylist.o \
       $(OBJDIR)/flowlist.o \
       $(OBJDIR)/link.o \
       $(OBJDIR)/links.o \
-      $(OBJDIR)/memory.o \
       $(OBJDIR)/node.o \
       $(OBJDIR)/packet.o \
       $(OBJDIR)/routing_table.o \
-      $(OBJDIR)/snapshot.o \
-      $(OBJDIR)/spine.o \
       $(OBJDIR)/system_stats.o \
       $(OBJDIR)/timeseries.o \
       $(OBJDIR)/tor.o 

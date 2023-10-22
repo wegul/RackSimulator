@@ -8,8 +8,6 @@ typedef struct flow
 {
     int isMemFlow;
 
-    
-
     int8_t active;
     int8_t finished;
     int64_t flow_id;
@@ -25,6 +23,7 @@ typedef struct flow
     int64_t pkts_received;
     int64_t bytes_sent;
     int64_t bytes_received;
+    // int64_t bytes_acked;
     int64_t expected_runtime;
 } flow_t;
 

@@ -44,23 +44,6 @@ void print_network_tput(int64_t total_bytes, int64_t total_pkts, int64_t ns)
 //     printf("]\n");
 // }
 
-void print_spine_stats(spine_t *spines)
-{
-    for (int i = 0; i < NUM_OF_SPINES; i++)
-    {
-        printf("Max Queue Lens at Spine %d:\n[", i);
-        for (int j = 0; j < SPINE_PORT_COUNT; j++)
-        {
-            if (j != 0)
-            {
-                printf(", ");
-            }
-            printf("%d", (int)spines[i]->queue_stat[j]->max_val);
-        }
-        printf("]\n\n");
-    }
-}
-
 // void print_tor_stats(tor_t * tors) {
 //     for (int i = 0; i < NUM_OF_TORS; i++) {
 //         printf("Max Upstream Queue Lens at Tor %d:\n[", i);

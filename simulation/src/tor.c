@@ -1,12 +1,11 @@
 #include "tor.h"
 
-tor_t create_tor(int16_t tor_index, int32_t sram_size, int16_t init_sram)
+tor_t create_tor(int16_t tor_index)
 {
     tor_t self = (tor_t)malloc(sizeof(struct tor));
     MALLOC_TEST(self, __LINE__);
     memset(self, 0, sizeof(struct tor));
     self->tor_index = tor_index;
-
 
     for (int i = 0; i < NODES_PER_RACK; ++i)
     {

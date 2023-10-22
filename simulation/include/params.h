@@ -36,9 +36,7 @@
     }
 
 #define max(a, b) (((a) > (b)) ? (a) : (b))
-
-#define TIMEOUT 100
-
+#define min(a, b) (((a) < (b)) ? (a) : (b))
 #define OVERSUBSCRIPTION 1
 #define NUM_OF_RACKS 1
 #define NODES_PER_RACK 4
@@ -59,21 +57,18 @@
 
 #define LINK_CAPACITY 50
 
-#define MAX_FLOW_ID 20
+#define MAX_FLOW_ID 1024
 #define RTABLE_SIZE MAX_FLOW_ID
 #define ECN_CUTOFF_TOR_UP 38
 #define ECN_CUTOFF_TOR_DOWN 70
 #define ECN_CUTOFF_SPINE 56
 #define ECN_WIDTH 8
-#define RETRANS_TIME 100
+#define TIMEOUT 1000
 
-#define MTU 64
+#define ETH_MTU 1400
+#define MEM_MTU 64
 #define SSTHRESH_START 8
 #define INTERPACKET_GAP 96
-#define SNAPSHOT_SIZE 4
-#define SRAM_SIZE MAX_FLOW_ID
-#define DRAM_SIZE MAX_FLOW_ID
-#define DRAM_DELAY 100
 
 extern int16_t ***source_list;
 extern int16_t epoch_len;

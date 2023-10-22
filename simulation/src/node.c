@@ -22,7 +22,7 @@ node_t create_node(int16_t node_index)
             self->ecn_marks[i][j] = 0;
         }
         self->ecn_idx[i] = 0;
-        self->cwnd[i] = 1;
+        self->cwnd[i] = 10;
         self->ssthresh[i] = SSTHRESH_START;
         self->acks_since_last_cwnd_increase[i] = 0;
     }
