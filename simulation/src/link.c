@@ -1,13 +1,4 @@
 #include "link.h"
-
-struct link
-{
-    int16_t src_node;
-    int16_t dst_node;
-    buffer_t *fifo;
-    void *ipg_data;
-};
-
 link_t create_link(int16_t src_node, int16_t dst_node, int32_t capacity)
 {
     link_t self = (link_t)malloc(sizeof(struct link));
@@ -30,11 +21,16 @@ void *link_dequeue(link_t self)
     NULL_TEST(self, __LINE__);
     return buffer_get(self->fifo);
 }
-
-void *link_peek(link_t self)
+void *link_get(link_t self, int32_t index)
 {
     NULL_TEST(self, __LINE__);
-    return buffer_peek(self->fifo, 0);
+    return buffer_remove(self->fifo, index);
+}
+
+void *link_peek(link_t self, int32_t index)
+{
+    NULL_TEST(self, __LINE__);
+    return buffer_peek(self->fifo, index);
 }
 
 void free_link(link_t self)

@@ -6,7 +6,7 @@ BINDIR = bin
 INCLUDEDIR = include
 LIBDIR = lib
 
-CFLAGS = -std=gnu99 -g -O3 -Wall -I$(INCLUDEDIR)
+CFLAGS = -std=gnu99 -g -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 ifeq ($(INCLUDE_SNAPSHOTS),"TRUE")
       CFLAGS += -DENABLE_SNAPSHOTS

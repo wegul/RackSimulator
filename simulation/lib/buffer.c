@@ -27,9 +27,8 @@ int8_t buffer_insert(buffer_t *self, void *element, int32_t index)
         self->num_elements++;
         if (self->num_elements >= self->size)
         {
-            printf("size*=2!!!!!\n");
+            printf("%d, size*=2!!!!!\n", self->num_elements);
             self->size *= 2;
-
             void **new_buffer = NULL;
             new_buffer = (void **)malloc(self->size * sizeof(void *));
             MALLOC_TEST(new_buffer, __LINE__);
@@ -63,8 +62,10 @@ int8_t buffer_put(buffer_t *self, void *element)
 }
 int8_t pkt_recv(buffer_t *self, void *element)
 {
-    if (self->num_elements + 1 >= self->size)
+    if (self->num_elements + 1 > self->size)
+    {
         return -1;
+    }
     return buffer_insert(self, element, self->num_elements);
 }
 
