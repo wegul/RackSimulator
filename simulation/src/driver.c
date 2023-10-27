@@ -58,7 +58,7 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         // Activate inactive flows
         /*---------------------------------------------------------------------------*/
-        for (; flow_idx < flowlist->num_flows; flow_idx++)
+        for (flow_idx = 0; flow_idx < flowlist->num_flows; flow_idx++)
         {
             flow_t *flow = flowlist->flows[flow_idx];
             if (flow == NULL || flow->timeslot > curr_timeslot)
