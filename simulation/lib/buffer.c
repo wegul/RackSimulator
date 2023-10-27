@@ -25,7 +25,7 @@ int8_t buffer_insert(buffer_t *self, void *element, int32_t index)
     if (self != NULL && element != NULL && index <= self->num_elements)
     {
         self->num_elements++;
-        if (self->num_elements >= self->size)
+        if (self->num_elements > self->size)
         {
             printf("%d, size*=2!!!!!\n", self->num_elements);
             self->size *= 2;

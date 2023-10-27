@@ -16,7 +16,7 @@ node_t create_node(int16_t node_index)
         self->seq_num[i] = 0;
         self->ack_num[i] = 0;
         self->last_acked[i] = 0;
-        self->last_ack_time[i] = 99999999;
+        self->last_ack_time[i] = 0;
         for (int j = 0; j < ECN_WIDTH; j++)
         {
             self->ecn_marks[i][j] = 0;

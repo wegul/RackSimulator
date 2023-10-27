@@ -12,8 +12,8 @@ tor_t create_tor(int16_t tor_index)
         self->upstream_pkt_buffer[i] = create_buffer(TOR_UPSTREAM_BUFFER_LEN);      // recved from host
         self->downstream_send_buffer[i] = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN); // pkts that will be sent to host
 
-        self->upstream_mem_buffer[i] = create_buffer(1024);
-        self->downstream_mem_buffer[i] = create_buffer(1024);
+        self->upstream_mem_buffer[i] = create_buffer(TOR_DOWNSTREAM_MEMBUF_LEN);
+        self->downstream_mem_buffer[i] = create_buffer(TOR_UPSTREAM_MEMBUF_LEN);
     }
 
     create_routing_table(self->routing_table);

@@ -8,9 +8,9 @@ import random
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', required=True)
-    parser.add_argument('-n', default=4)  # number of hosts
-    parser.add_argument('-x', default=1)
-    parser.add_argument('-t', default=10000)  # size of flow
+    parser.add_argument('-n', default=40)  # number of hosts
+    parser.add_argument('-x', default=16)
+    parser.add_argument('-t', default=100000)  # size of flow
     args = parser.parse_args()
 
     filename = args.f
