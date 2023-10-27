@@ -37,7 +37,7 @@ volatile int64_t max_bytes_rcvd = 1000000;
 
 // Output files
 FILE *out_fp = NULL;
-FILE *timeseries_fp = NULL;
+FILE *sw_queue_fp = NULL;
 FILE *spine_outfiles[NUM_OF_SPINES];
 FILE *tor_outfiles[NUM_OF_RACKS];
 FILE *host_outfiles[NUM_OF_NODES];
@@ -125,6 +125,16 @@ void work_per_timeslot()
                 net_pkt = (packet_t)buffer_get(tor->upstream_pkt_buffer[j]);
             }
         }
+        // Update queue info
+        for (int j = 0; j < NODES_PER_RACK; j++)
+        {
+            fprintf(sw_queue_fp, "%d, ", tor->downstream_send_buffer[j]->num_elements);
+        }
+        for (int j = 0; j < NODES_PER_RACK; j++)
+        {
+            fprintf(sw_queue_fp, "%d, ", tor->downstream_mem_buffer[j]->num_elements);
+        }
+        fprintf(sw_queue_fp, "\n");
 
         /*---------------------------------------------------------------------------*/
         // HOST -- SEND
@@ -678,6 +688,22 @@ void free_network()
 void open_switch_outfiles(char *base_filename)
 {
     char csv_suffix[4] = ".csv";
+
+    char pathname[520] = "out/";
+    strncat(pathname, "QueueInfo_", 500);
+    strncat(pathname, base_filename, 20);
+    sw_queue_fp = fopen(pathname, "w");
+    // Net: downstream_send_buffer (egress)
+    for (int i = 0; i < NODES_PER_RACK; i++)
+    {
+        fprintf(sw_queue_fp, "Net-%d,", i);
+    }
+
+    for (int i = 0; i < NODES_PER_RACK; i++)
+    {
+        fprintf(sw_queue_fp, "Mem-%d,", i);
+    }
+    fprintf(sw_queue_fp, "\n");
     for (int i = 0; i < NUM_OF_RACKS; i++)
     {
         char filename[520] = "out/";
@@ -758,8 +784,6 @@ void process_args(int argc, char **argv)
                 strcpy(filename, optarg);
                 strncpy(out_filename, filename, strlen(filename));
                 strncat(out_filename, out_suffix, 4);
-// strncpy(timeseries_filename, filename, strlen(filename));
-// strncat(timeseries_filename, timeseries_suffix, 15);
 #ifdef RECORD_PACKETS
                 printf("Writing switch packet data to switch.csv files\n");
                 printf("open switch out tiles %s\n", filename);
