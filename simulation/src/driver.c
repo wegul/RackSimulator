@@ -103,11 +103,16 @@ void work_per_timeslot()
             while (net_pkt)
             {
                 int dst_host = net_pkt->dst_node % NODES_PER_RACK;
+                // DCTCP: Mark packet when adding packet exceeds ECN cutoff
+                if (tor->downstream_send_buffer[dst_host]->num_elements > ECN_CUTOFF_TOR_DOWN)
+                {
+                    net_pkt->ecn_flag = 1;
+                }
                 // Push into down stream buffer; drop data packets if egress queue has no space
                 int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
                 if (dropped < 0)
                 {
-                    printf("egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+                    printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, net, dropped\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
                 }
                 else
@@ -250,8 +255,8 @@ void work_per_timeslot()
                         node->seq_num[flow_id] += size;
                         // Refresh timer
                         node->last_ack_time[flow->flow_id] = curr_timeslot;
-                        printf("timeout!! flowid:%d , %d->%d, last ack time:%d, last_ack: %d, curr:%d, cwnd: %d\n",
-                               flow->flow_id, flow->src, flow->dst, node->last_ack_time[flow->flow_id], node->last_acked[flow->flow_id], curr_timeslot, node->cwnd[flow_id]);
+                        // printf("timeout!! flowid:%d , %d->%d, last ack time:%d, last_ack: %d, curr:%d, cwnd: %d\n",
+                        //        flow->flow_id, flow->src, flow->dst, node->last_ack_time[flow->flow_id], node->last_acked[flow->flow_id], curr_timeslot, node->cwnd[flow_id]);
                     }
                     // If no retrans and there are new packets need to be sent (some packets are not received/acked)
                     else if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0)
@@ -343,11 +348,6 @@ void work_per_timeslot()
                         {
                             printf("upstream drop with num %d\n", tor->upstream_pkt_buffer[tor_port]->num_elements);
                         }
-                        // DCTCP: Mark packet when adding packet exceeds ECN cutoff
-                        if (tor->upstream_pkt_buffer[tor_port]->num_elements > ECN_CUTOFF_TOR_UP)
-                        {
-                            pkt->ecn_flag = 1;
-                        }
                     }
                 }
             }
@@ -421,7 +421,7 @@ void work_per_timeslot()
                             total_bytes_rcvd += pkt->size;
                             total_pkts_rcvd++;
                             // Determine if last packet of flow has been received
-                            if (flow->bytes_received >= flow->flow_size_bytes)
+                            if (!flow->finished && flow->bytes_received >= flow->flow_size_bytes)
                             {
                                 flow->active = 0;
                                 flowlist->active_flows--;

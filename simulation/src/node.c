@@ -49,7 +49,7 @@ void track_ecn(node_t self, int16_t flow_id, int16_t ecn_mark)
             self->cwnd[flow_id] = 1;
         }
 #ifdef DEBUG_DCTCP
-        printf("node %d reduced flow %d cwnd to %d with %d/8 ECN markers\n", (int)self->node_index, (int)flow_id, (int)self->cwnd[node], count);
+        printf("node %d reduced flow %d cwnd to %d with %d/8 ECN markers\n", (int)self->node_index, (int)flow_id, (int)self->cwnd[flow_id], count);
 #endif
     }
     else
