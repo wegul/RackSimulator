@@ -46,19 +46,23 @@ def main():
     # add isMem
     trace.insert(1, column=None, value=isMem)
 
-    # Add MemType, TODO: make it random
+    # Add MemType
+    flowSize = trace.iloc[:, 4].values
     memType_arr = []
     if isMem == 1:
-        for item in range(0, trace.shape[0]):
+        for i in range(0, trace.shape[0]):
             memType = random.randint(0, 1)
             if memType == 1:
                 memType = 999
+            else:
+                flowSize[i] = 24
             memType_arr.append(memType)
     else:
         memType_arr = [-1]*trace.shape[0]
+    trace.iloc[:, 4] = pd.Series(flowSize)
     trace.insert(2, column=None, value=memType_arr)
 
-    # Add ReqLen,TODO: make it variable
+    # Add ReqLen
     reqLen_arr = []
     for memType in memType_arr:
         if memType == 0:
