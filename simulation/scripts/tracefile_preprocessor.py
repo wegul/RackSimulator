@@ -1,11 +1,75 @@
 import os
+import random
 import sys
 import re
 import argparse
 import math
+import pandas as pd
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', required=True)
+    parser.add_argument('-b', default=100)  # bandwidth in Gbps
+    parser.add_argument('-c', default=8)  # packet size, in bytes
+    parser.add_argument('-ism', default=1)  # isMem
+    args = parser.parse_args()
+    slot_time = (float(args.c) * 8.0) / float(args.b) * 1e-9
+    filename = args.f
+    isMem = args.ism
+    trace = pd.read_csv(filename, header=None)
+
+    # Change second to timeslot_num
+    timeslots = []
+    start_time_arr = trace.iloc[:, -1].values
+    for time in start_time_arr:
+        slot = (int)(time/slot_time)
+        timeslots.append((str)(slot))
+    trace.iloc[:, -1] = pd.Series(timeslots)
+    newfilename = filename[:-4]+".proced.csv"
+
+    # Map 512 to 64
+    src_arr = trace.iloc[:, 1].values
+    dst_arr = trace.iloc[:, 2].values
+    new_src = []
+    new_dst = []
+    for i in range(0, trace.shape[0]):
+        a = src_arr[i] % 64
+        b = dst_arr[i] % 64
+        if a == b:
+            b = (b+1) % 64
+        new_src.append(a)
+        new_dst.append(b)
+    trace.iloc[:, 1] = pd.Series(new_src)
+    trace.iloc[:, 2] = pd.Series(new_dst)
+
+    # add isMem
+    trace.insert(1, column=None, value=isMem)
+
+    # Add MemType, TODO: make it random
+    memType_arr = []
+    if isMem == 1:
+        for item in range(0, trace.shape[0]):
+            memType = random.randint(0, 1)
+            if memType == 1:
+                memType = 999
+            memType_arr.append(memType)
+    else:
+        memType_arr = [-1]*trace.shape[0]
+    trace.insert(2, column=None, value=memType_arr)
+
+    # Add ReqLen,TODO: make it variable
+    reqLen_arr = []
+    for memType in memType_arr:
+        if memType == 0:
+            reqLen_arr.append(random.randint(64, 4096))
+        else:
+            reqLen_arr.append(-1)
+    trace.insert(6, column=None, value=reqLen_arr)
+    trace.to_csv(newfilename, header=False, index=False)
+
+
+def main_obsolete():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', required=True)
     parser.add_argument('-b', default=100)  # bandwidth in Gbps
