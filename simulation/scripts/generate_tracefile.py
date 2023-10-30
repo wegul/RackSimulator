@@ -8,7 +8,7 @@ import random
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', required=True)
-    parser.add_argument('-n', default=40)  # number of hosts
+    parser.add_argument('-n', default=64)  # number of hosts
     parser.add_argument('-x', default=16)
     parser.add_argument('-t', default=100000)  # size of flow
     args = parser.parse_args()
@@ -26,7 +26,19 @@ def main():
                 if (dst != src):
                     for flow in range(host_to_host_flows):
                         isMem = random.randint(0, 1)
-                        w_str = f'{flow_id},{isMem},{src},{dst},10000,0\n'
+                        flow_size = 10000
+                        memType = -1
+                        rreq_bytes = -1
+                        if isMem == 1:
+                            flow_size = random.randint(8, 1800)
+                            memType = random.randint(0, 2)
+                            if memType == 2:  # WREQ
+                                memType = 999
+                            else:  # RREQ
+                                memType = 0
+                                rreq_bytes = random.randint(8, 1800)
+                                flow_size = 24
+                        w_str = f'{flow_id},{isMem},{memType},{src},{dst},{flow_size},{rreq_bytes},0\n'
                         csvfile.write(w_str)
                         flow_id += 1
         # end_str = f'{flow_id},0,0,10000000,0.0005'

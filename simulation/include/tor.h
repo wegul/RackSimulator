@@ -7,7 +7,15 @@
 #include "routing_table.h"
 #include "timeseries.h"
 #include "memory.h"
-
+struct notification
+{
+    int req_type; // -1=invalid; 0=RREQ, 2=WREQ
+    int length;
+    int isGranted;
+    int sender; // if RREQ, sender is pkt->dst_node, else is pkt->src_node
+    int receiver;
+};
+typedef struct notification *notif_t;
 struct tor
 {
     int16_t tor_index;
@@ -19,6 +27,7 @@ struct tor
     buffer_t *upstream_pkt_buffer[NODES_PER_RACK];
     // packet sending data structures
     buffer_t *downstream_send_buffer[NODES_PER_RACK];
+    notif_t notif_queue[MAX_FLOW_ID];
 };
 typedef struct tor *tor_t;
 

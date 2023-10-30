@@ -15,6 +15,18 @@ tor_t create_tor(int16_t tor_index)
         self->upstream_mem_buffer[i] = create_buffer(TOR_DOWNSTREAM_MEMBUF_LEN);
         self->downstream_mem_buffer[i] = create_buffer(TOR_UPSTREAM_MEMBUF_LEN);
     }
+    for (int i = 0; i < MAX_FLOW_ID; i++)
+    {
+        self->notif_queue[i] = malloc(sizeof(notif_t));
+    }
+    for (int i = 0; i < MAX_FLOW_ID; i++)
+    {
+        self->notif_queue[i]->req_type = -1;
+        self->notif_queue[i]->length = -1;
+        self->notif_queue[i]->isGranted = 0;
+        self->notif_queue[i]->sender = -1;
+        self->notif_queue[i]->receiver = -1;
+    }
 
     create_routing_table(self->routing_table);
     return self;

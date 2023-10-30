@@ -18,7 +18,7 @@
 #include "memory.h"
 
 void read_tracefile(char *filename);
-void initialize_flow(int flow_id, int isMemFlow, int src, int dst, int flow_size_bytes, int timeslot);
+void initialize_flow(int flow_id, int isMemFlow, int memType, int src, int dst, int flow_size_bytes, int rreq_bytes, int timeslot);
 int comp(const void *elem1, const void *elem2);
 int cmp_link(const void *elem1, const void *elem2);
 void open_switch_outfiles(char *base_filename);

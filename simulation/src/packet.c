@@ -5,7 +5,10 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
 {
     packet_t self = (packet_t)malloc(sizeof(struct packet));
     MALLOC_TEST(self, __LINE__);
-    self->isMemPkt = 0;
+    self->isMemPkt = 0; // Default Net packet
+    self->memType = -1;
+    self->req_len = -1; // Default
+
     self->src_node = src_node;
     self->dst_node = dst_node;
     self->flow_id = flow_id;
@@ -16,10 +19,6 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     self->control_flag = 0;
     self->ecn_flag = 0;
 
-    self->time_arrived_at_spine = 0;
-    self->time_left_spine = 0;
-    self->time_spent_at_spine = 0;
-    self->snapshotted = 0;
     return self;
 }
 

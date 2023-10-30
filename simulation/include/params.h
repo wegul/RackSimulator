@@ -54,18 +54,18 @@
 // Queue Size
 #define TOR_UPSTREAM_BUFFER_LEN 50000
 #define TOR_DOWNSTREAM_BUFFER_LEN 50000
-#define TOR_UPSTREAM_MEMBUF_LEN 99999
-#define TOR_DOWNSTREAM_MEMBUF_LEN 99999
+#define TOR_UPSTREAM_MEMBUF_LEN 2048
+#define TOR_DOWNSTREAM_MEMBUF_LEN 2048
 
-#define LINK_CAPACITY 4096
+#define LINK_CAPACITY 1024
 
-#define MAX_FLOW_ID 1024
+#define MAX_FLOW_ID 8192
 #define RTABLE_SIZE MAX_FLOW_ID
+#define CC_BOUND 100 // CONGESTION thresholds
 #define ECN_CUTOFF_TOR_UP 40000
 #define ECN_CUTOFF_TOR_DOWN 40000
 #define ECN_WIDTH 1500
 #define TIMEOUT 4000
-
 #define BLK_SIZE 8
 #define SSTHRESH_START 8192
 #define INTERPACKET_GAP 96
@@ -73,7 +73,6 @@
 extern int16_t ***source_list;
 extern int16_t epoch_len;
 extern volatile int64_t curr_timeslot;
-extern volatile int64_t curr_epoch;
 extern int8_t flow_trace_scanned_completely;
 extern char *ptr;
 extern volatile int64_t total_flows_started;
