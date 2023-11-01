@@ -12,7 +12,7 @@ struct notification
     int req_type; // -1=invalid; 0=RREQ, 2=WREQ
     int length;
     int isGranted;
-    int sender; // if RREQ, sender is pkt->dst_node, else is pkt->src_node
+    int sender; // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
     int receiver;
 };
 typedef struct notification *notif_t;
@@ -28,6 +28,8 @@ struct tor
     // packet sending data structures
     buffer_t *downstream_send_buffer[NODES_PER_RACK];
     notif_t notif_queue[MAX_FLOW_ID];
+    int downstream_mem_buffer_lock[NODES_PER_RACK];
+    int ntf_cnt;
 };
 typedef struct tor *tor_t;
 

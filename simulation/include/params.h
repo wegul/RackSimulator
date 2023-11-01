@@ -59,7 +59,9 @@
 
 #define LINK_CAPACITY 1024
 
-#define MAX_FLOW_ID 8192
+// #define MAX_FLOW_ID 6000000
+#define MAX_FLOW_ID 4096
+
 #define RTABLE_SIZE MAX_FLOW_ID
 #define CC_BOUND 100 // CONGESTION thresholds
 #define ECN_CUTOFF_TOR_UP 40000

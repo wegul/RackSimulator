@@ -26,7 +26,9 @@ def main():
         slot = (int)(time/slot_time)
         timeslots.append((str)(slot))
     trace.iloc[:, -1] = pd.Series(timeslots)
-    newfilename = filename[:-4]+".proced.csv"
+    pathList = filename.split('/')
+    newfilename = pathList[-2]
+    newfilename = "./proced_workloads/"+filename[:-4]+".proced.csv"
 
     # Map 512 to 64
     src_arr = trace.iloc[:, 1].values
@@ -64,13 +66,13 @@ def main():
 
     # Add ReqLen
     reqLen_arr = []
-    for memType in memType_arr:
-        if memType == 0:
-            reqLen_arr.append(random.randint(64, 4096))
+    for i in range(0, len(memType_arr)):
+        if memType_arr[i] == 0:
+            reqLen_arr.append(flowSize[i])
         else:
             reqLen_arr.append(-1)
     trace.insert(6, column=None, value=reqLen_arr)
-    trace.to_csv(newfilename, header=False, index=False)
+    trace.iloc[0:2048, :].to_csv(newfilename, header=False, index=False)
 
 
 def main_obsolete():

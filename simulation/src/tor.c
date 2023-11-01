@@ -6,7 +6,7 @@ tor_t create_tor(int16_t tor_index)
     MALLOC_TEST(self, __LINE__);
     memset(self, 0, sizeof(struct tor));
     self->tor_index = tor_index;
-
+    self->ntf_cnt = 0;
     for (int i = 0; i < NODES_PER_RACK; ++i)
     {
         self->upstream_pkt_buffer[i] = create_buffer(TOR_UPSTREAM_BUFFER_LEN);      // recved from host
@@ -14,6 +14,7 @@ tor_t create_tor(int16_t tor_index)
 
         self->upstream_mem_buffer[i] = create_buffer(TOR_DOWNSTREAM_MEMBUF_LEN);
         self->downstream_mem_buffer[i] = create_buffer(TOR_UPSTREAM_MEMBUF_LEN);
+        self->downstream_mem_buffer_lock[i] = 0;
     }
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
