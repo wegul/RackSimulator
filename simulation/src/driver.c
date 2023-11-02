@@ -137,7 +137,7 @@ void work_per_timeslot()
                 int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
                 if (dropped < 0)
                 {
-                    printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+                    // printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, net, dropped\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
                 }
                 else
@@ -275,7 +275,7 @@ void work_per_timeslot()
                             }
                             else if (flow->memType == 1) // RRESP
                             {
-                                if (flow->flow_size_bytes - flow->bytes_sent <= 8 * per_hop_propagation_delay_in_timeslots) // The last block
+                                if (flow->flow_size_bytes - flow->bytes_sent <= BLK_SIZE) // The last block
                                 {
                                     mem_pkt->memType = 0x2b;
                                 }
@@ -284,7 +284,7 @@ void work_per_timeslot()
                             }
                             else if (flow->memType == 2) // WREQ
                             {
-                                if (flow->flow_size_bytes - flow->bytes_sent <= 8 * per_hop_propagation_delay_in_timeslots) // The last block
+                                if (flow->flow_size_bytes - flow->bytes_sent <= BLK_SIZE) // The last block
                                 {
                                     mem_pkt->memType = 0x2c;
                                 }
@@ -505,8 +505,7 @@ void work_per_timeslot()
                         // Check SEQ state, accept only if no BLOCK drop: If received bytes is less than seq, suggesting pkt loss, then reject the whole packet, i.e., return to last_ack
                         if (flow->bytes_received + pkt->size < pkt->seq_num)
                         {
-                            printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
-                            // fflush(stdout);
+                            // printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
                             flow->bytes_received = nodes[flow->src]->last_acked[flow->flow_id];
                         }
                         else
@@ -536,7 +535,7 @@ void work_per_timeslot()
                                         rresp_flow->memType = 1; // RRESP memType is 1
                                         rresp_flow->expected_runtime = pkt->req_len / BLK_SIZE + 6;
                                         add_flow(flowlist, rresp_flow);
-                                        printf("Created RRESP flow %d, requester: %d responder %d, flow_size %dB ts %d, num of flows: %d\n", flowlist->num_flows + 1, flow->src, flow->dst, pkt->req_len, curr_timeslot + 1, flowlist->num_flows);
+                                        printf("Created RRESP flow %d, requester: %d responder %d, flow_size %dB ts %d, num of flows: %d\n", flowlist->num_flows - 1, flow->src, flow->dst, pkt->req_len, curr_timeslot + 1, flowlist->num_flows);
                                     }
                                 }
                                 else // Normal Mem traffic
@@ -737,7 +736,7 @@ void read_tracefile(char *filename)
         int flow_size_bytes = -1;
         int timeslot = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d,%d", &flow_id, &isMemFlow, &memType, &src, &dst, &flow_size_bytes, &rreq_bytes, &timeslot) >= 8 && flow_id < MAX_FLOW_ID)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d,%d", &flow_id, &isMemFlow, &memType, &src, &dst, &flow_size_bytes, &rreq_bytes, &timeslot) >= 8 && flow_id <= MAX_FLOW_ID / 2)
         {
             initialize_flow(flow_id, isMemFlow, memType, src, dst, flow_size_bytes, rreq_bytes, timeslot);
         }

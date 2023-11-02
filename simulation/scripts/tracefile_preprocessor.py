@@ -26,8 +26,8 @@ def main():
         slot = (int)(time/slot_time)
         timeslots.append((str)(slot))
     trace.iloc[:, -1] = pd.Series(timeslots)
-    pathList = filename.split('/')
-    newfilename = pathList[-2]
+    # pathList = filename.split('/')
+    # newfilename = pathList[-2]
     newfilename = "./proced_workloads/"+filename[:-4]+".proced.csv"
 
     # Map 512 to 64
