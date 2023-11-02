@@ -26,9 +26,9 @@ def main():
         slot = (int)(time/slot_time)
         timeslots.append((str)(slot))
     trace.iloc[:, -1] = pd.Series(timeslots)
-    # pathList = filename.split('/')
-    # newfilename = pathList[-2]
-    newfilename = "./proced_workloads/"+filename[:-4]+".proced.csv"
+    pathList = filename.split('/')
+    newfilename = pathList[-1]
+    newfilename = "./simulation/proced_workloads/"+newfilename[:-4]+".proced.csv"
 
     # Map 512 to 64
     src_arr = trace.iloc[:, 1].values
@@ -72,7 +72,7 @@ def main():
         else:
             reqLen_arr.append(-1)
     trace.insert(6, column=None, value=reqLen_arr)
-    trace.iloc[0:2048, :].to_csv(newfilename, header=False, index=False)
+    trace.iloc[0:4096, :].to_csv(newfilename, header=False, index=False)
 
 
 def main_obsolete():
