@@ -10,3 +10,6 @@ simulation/experiment*
 simulation/best_case_*
 simulation/balanced_case_*
 simulation/nohup.out
+simulation/mn*
+simulation/log*
+*.csv
