@@ -106,7 +106,9 @@ void work_per_timeslot()
                     grant->memType = 200;
                     grant->req_len = ntf->length;
                     assert("TOR PROC GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+#ifdef RECORD_PACKETS
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, grant\n", (int)grant->flow_id, (int)grant->src_node, (int)grant->dst_node, (int)grant->dst_node, (int)(curr_timeslot), (int)grant->time_when_transmitted_from_src);
+#endif
                 }
             }
         }
@@ -120,7 +122,9 @@ void work_per_timeslot()
                 int dst_host = mem_pkt->dst_node;
                 assert("TOR PROC OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[dst_host], mem_pkt) != -1);
                 // printf("tor recv (%d), cnt: %d %d-%d, flowid: %d, curr: %d\n", mem_pkt->isMemPkt, mem_pkt->pkt_id, mem_pkt->src_node, mem_pkt->dst_node, mem_pkt->flow_id, curr_timeslot);
+#ifdef RECORD_PACKETS
                 fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, mem\n", (int)mem_pkt->flow_id, (int)mem_pkt->src_node, (int)mem_pkt->dst_node, (int)mem_pkt->dst_node, (int)(curr_timeslot), (int)mem_pkt->time_when_transmitted_from_src);
+#endif
                 mem_pkt = (packet_t)buffer_get(tor->upstream_mem_buffer[j]);
             }
             net_pkt = (packet_t)buffer_get(tor->upstream_pkt_buffer[j]); // this is recved from hosts, now need to forward
@@ -138,11 +142,14 @@ void work_per_timeslot()
                 if (dropped < 0)
                 {
                     // printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+                    #ifdef RECORD_PACKETS
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, net, dropped\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
+                    #endif
                 }
                 else
                 {
                     // printf("tor recv (%d), cnt: %d %d-%d, deq: %d, curr: %d\n", net_pkt->isMemPkt, net_pkt->pkt_id, net_pkt->src_node, net_pkt->dst_node, net_pkt->time_to_dequeue_from_link, curr_timeslot);
+#ifdef RECORD_PACKETS
                     if (net_pkt->control_flag == 1)
                     {
                         fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, ack\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
@@ -151,20 +158,21 @@ void work_per_timeslot()
                     {
                         fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, data\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
                     }
+#endif
                 }
                 net_pkt = (packet_t)buffer_get(tor->upstream_pkt_buffer[j]);
             }
         }
         // Update queue info
-        for (int j = 0; j < NODES_PER_RACK; j++)
-        {
-            fprintf(sw_queue_fp, "%d, ", tor->downstream_send_buffer[j]->num_elements);
-        }
-        for (int j = 0; j < NODES_PER_RACK; j++)
-        {
-            fprintf(sw_queue_fp, "%d, ", tor->downstream_mem_buffer[j]->num_elements);
-        }
-        fprintf(sw_queue_fp, "\n");
+        // for (int j = 0; j < NODES_PER_RACK; j++)
+        // {
+        //     fprintf(sw_queue_fp, "%d, ", tor->downstream_send_buffer[j]->num_elements);
+        // }
+        // for (int j = 0; j < NODES_PER_RACK; j++)
+        // {
+        //     fprintf(sw_queue_fp, "%d, ", tor->downstream_mem_buffer[j]->num_elements);
+        // }
+        // fprintf(sw_queue_fp, "\n");
 
         /*---------------------------------------------------------------------------*/
         // HOST -- SEND
@@ -533,14 +541,16 @@ void work_per_timeslot()
                                         flow_t *rresp_flow = create_flow(flowlist->num_flows, pkt->req_len, node->node_index /* DST send to Requester*/, flow->src, curr_timeslot + 1);
                                         rresp_flow->isMemFlow = 1;
                                         rresp_flow->memType = 1; // RRESP memType is 1
-                                        rresp_flow->expected_runtime = pkt->req_len / BLK_SIZE + 6;
+                                        rresp_flow->expected_runtime = pkt->req_len / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots;
                                         add_flow(flowlist, rresp_flow);
                                         printf("Created RRESP flow %d, requester: %d responder %d, flow_size %dB ts %d, num of flows: %d\n", flowlist->num_flows - 1, flow->src, flow->dst, pkt->req_len, curr_timeslot + 1, flowlist->num_flows);
                                     }
                                 }
                                 else // Normal Mem traffic
                                 {
+                                    #ifdef RECORD_PACKETS
                                     fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, mem(%02x), %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->memType, (int)pkt->seq_num);
+                                    #endif
                                 }
                             }
                             else
@@ -548,7 +558,9 @@ void work_per_timeslot()
                                 // Reply ACK, and write to file as a pkt
                                 if (pkt->seq_num - node->ack_num[pkt->flow_id] > 1400)
                                 {
+                                    #ifdef RECORD_PACKETS
                                     fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, net, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
+                                    #endif
                                     node->ack_num[pkt->flow_id] = pkt->seq_num + pkt->size;
                                     packet_t ack = ack_packet(pkt, node->ack_num[pkt->flow_id]);
                                     ack->isMemPkt = 0;
@@ -582,7 +594,9 @@ void work_per_timeslot()
                     // Control Packet, then this node is a sender node
                     else
                     {
+                        #ifdef RECORD_PACKETS
                         fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, netack, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
+                        #endif
                         // Check ECN flag
                         track_ecn(node, pkt->flow_id, pkt->ecn_flag);
                         flow_t *flow = flowlist->flows[pkt->flow_id];
@@ -908,6 +922,10 @@ void process_args(int argc, char **argv)
             num_of_flows_to_finish = atoi(optarg);
             printf("Stop experiment after %ld flows have finished\n", num_of_flows_to_finish);
             break;
+        case 'b':
+            link_bandwidth = atof(optarg);
+            printf("Running with a link bandwidth of: %fGbps\n", link_bandwidth);
+            break;
         case 'u':
             burst_size = atoi(optarg);
             printf("Using packet burst size of %d\n", burst_size);
@@ -922,12 +940,12 @@ void process_args(int argc, char **argv)
                 strcpy(filename, optarg);
                 strncpy(out_filename, filename, strlen(filename));
                 strncat(out_filename, out_suffix, 4);
-#ifdef RECORD_PACKETS
-                printf("Writing switch packet data to switch.csv files\n");
-                printf("open switch out tiles %s\n", filename);
-                open_switch_outfiles(filename);
-                open_host_outfiles(filename);
-#endif
+                // #ifdef RECORD_PACKETS
+                //                 printf("Writing switch packet data to switch.csv files\n");
+                //                 printf("open switch out tiles %s\n", filename);
+                //                 open_switch_outfiles(filename);
+                //                 open_host_outfiles(filename);
+                // #endif
             }
             break;
         default:
