@@ -627,8 +627,8 @@ void work_per_timeslot()
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5)
         {
             int completed_flows = 0;
-            int flow_completion_times[flowlist->num_flows];
-            int slowdowns[flowlist->num_flows];
+            float flow_completion_times[flowlist->num_flows];
+            float slowdowns[flowlist->num_flows];
             float avg_slowdown = 0;
             printf("FCT: ");
             for (int i = 0; i < flowlist->num_flows; i++)
@@ -638,13 +638,12 @@ void work_per_timeslot()
                     printf("%d, ", flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot);
                     flow_completion_times[completed_flows] = flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
                     avg_flow_completion_time += flowlist->flows[i]->finish_timeslot - flowlist->flows[i]->timeslot;
-                    slowdowns[completed_flows] = flow_completion_times[completed_flows] / flowlist->flows[i]->expected_runtime;
+                    slowdowns[completed_flows] = flow_completion_times[completed_flows] / (double)flowlist->flows[i]->expected_runtime;
                     avg_slowdown += slowdowns[completed_flows];
                     completed_flows++;
                 }
             }
             printf("\n");
-
             int pct99fct = 0;
             int medfct = 0;
             qsort(flow_completion_times, completed_flows, sizeof(int), comp);
@@ -755,7 +754,15 @@ void initialize_flow(int flow_id, int isMemFlow, int memType, int src, int dst, 
         new_flow->isMemFlow = isMemFlow;
         new_flow->memType = memType;
         new_flow->rreq_bytes = rreq_bytes;
-        new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 6;
+        if (isMemFlow)
+        {
+            new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots;
+        }
+        else
+        {
+            new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + 2 * per_sw_delay_in_timeslots;
+        }
+
         add_flow(flowlist, new_flow);
         // #ifdef DEBUG_DRIVER
         printf("initialized flow %d (%d, %d), src %d dst %d, flow_size %dB (%d) ts %d\n", flow_id, isMemFlow, memType, src, dst, flow_size_bytes, flow_size_bytes / 8, timeslot);

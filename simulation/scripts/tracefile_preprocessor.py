@@ -9,14 +9,15 @@ import pandas as pd
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', required=True)
+    parser.add_argument('-fi', required=True)
     parser.add_argument('-b', default=100)  # bandwidth in Gbps
     parser.add_argument('-c', default=8)  # packet size, in bytes
-    parser.add_argument('-ism', default=1)  # isMem
+    parser.add_argument('-ism', required=True)  # isMem
+    parser.add_argument('-fo', required=True)
     args = parser.parse_args()
     slot_time = (float(args.c) * 8.0) / float(args.b) * 1e-9
-    filename = args.f
-    isMem = args.ism
+    filename = args.fi
+    isMem = (int)(args.ism)
     trace = pd.read_csv(filename, header=None)
 
     # Change second to timeslot_num
@@ -26,9 +27,10 @@ def main():
         slot = (int)(time/slot_time)
         timeslots.append((str)(slot))
     trace.iloc[:, -1] = pd.Series(timeslots)
-    pathList = filename.split('/')
-    newfilename = pathList[-1]
-    newfilename = "./simulation/proced_workloads/"+newfilename[:-4]+".proced.csv"
+    # pathList = filename.split('/')
+    # newfilename = pathList[-1]
+    # newfilename = "./proced_workloads/"+newfilename[:-4]+".proced.csv"
+    newfilename = args.fo
 
     # Map 512 to 64
     src_arr = trace.iloc[:, 1].values
@@ -72,7 +74,7 @@ def main():
         else:
             reqLen_arr.append(-1)
     trace.insert(6, column=None, value=reqLen_arr)
-    trace.iloc[0:4096, :].to_csv(newfilename, header=False, index=False)
+    trace.iloc[0:8000, :].to_csv(newfilename, header=False, index=False)
 
 
 def main_obsolete():

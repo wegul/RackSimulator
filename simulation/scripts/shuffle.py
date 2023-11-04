@@ -4,10 +4,11 @@ from sklearn.utils import shuffle
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', required=True)
+parser.add_argument('-fi', required=True)
+parser.add_argument('-fo', required=True)
 args = parser.parse_args()
 
-filename = args.f
+filename = args.fi
 
 # Load the data from the CSV file
 data = pd.read_csv(filename, header=None, index_col=0)
@@ -18,4 +19,5 @@ shuffled_data = shuffle(data, random_state=1)
 shuffled_data.reset_index(drop=True, inplace=True)
 
 # Write the shuffled data back to a CSV file
-shuffled_data.to_csv("shuffled.csv", header=False, index=True)
+# shuffled_data.to_csv("./proced_workloads/"+ "memcached" + "_shuffled.csv", header=False, index=True)
+shuffled_data.to_csv(args.fo, header=False, index=True)
