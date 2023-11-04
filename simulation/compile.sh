@@ -12,4 +12,4 @@ fi
 
 echo -e '\n*** Compiling [make clean; make all] ***\n'
 make clean
-make all
+make all 

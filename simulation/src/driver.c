@@ -141,10 +141,10 @@ void work_per_timeslot()
                 int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
                 if (dropped < 0)
                 {
-                    // printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
-                    #ifdef RECORD_PACKETS
+// printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+#ifdef RECORD_PACKETS
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, net, dropped\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
-                    #endif
+#endif
                 }
                 else
                 {
@@ -548,9 +548,9 @@ void work_per_timeslot()
                                 }
                                 else // Normal Mem traffic
                                 {
-                                    #ifdef RECORD_PACKETS
+#ifdef RECORD_PACKETS
                                     fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, mem(%02x), %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->memType, (int)pkt->seq_num);
-                                    #endif
+#endif
                                 }
                             }
                             else
@@ -558,9 +558,9 @@ void work_per_timeslot()
                                 // Reply ACK, and write to file as a pkt
                                 if (pkt->seq_num - node->ack_num[pkt->flow_id] > 1400)
                                 {
-                                    #ifdef RECORD_PACKETS
+#ifdef RECORD_PACKETS
                                     fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, net, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
-                                    #endif
+#endif
                                     node->ack_num[pkt->flow_id] = pkt->seq_num + pkt->size;
                                     packet_t ack = ack_packet(pkt, node->ack_num[pkt->flow_id]);
                                     ack->isMemPkt = 0;
@@ -594,9 +594,9 @@ void work_per_timeslot()
                     // Control Packet, then this node is a sender node
                     else
                     {
-                        #ifdef RECORD_PACKETS
+#ifdef RECORD_PACKETS
                         fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, netack, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
-                        #endif
+#endif
                         // Check ECN flag
                         track_ecn(node, pkt->flow_id, pkt->ecn_flag);
                         flow_t *flow = flowlist->flows[pkt->flow_id];
@@ -940,12 +940,12 @@ void process_args(int argc, char **argv)
                 strcpy(filename, optarg);
                 strncpy(out_filename, filename, strlen(filename));
                 strncat(out_filename, out_suffix, 4);
-                // #ifdef RECORD_PACKETS
-                //                 printf("Writing switch packet data to switch.csv files\n");
-                //                 printf("open switch out tiles %s\n", filename);
-                //                 open_switch_outfiles(filename);
-                //                 open_host_outfiles(filename);
-                // #endif
+#ifdef RECORD_PACKETS
+                printf("Writing switch packet data to switch.csv files\n");
+                printf("open switch out tiles %s\n", filename);
+                open_switch_outfiles(filename);
+                open_host_outfiles(filename);
+#endif
             }
             break;
         default:
