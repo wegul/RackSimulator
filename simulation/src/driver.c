@@ -1,7 +1,7 @@
 #include "driver.h"
 
 // Default values for simulation
-static int pkt_size = 8;           // in bytes
+static int pkt_size = BLK_SIZE;    // in bytes
 static float link_bandwidth = 100; // in Gbps
 static float timeslot_len;         // in ns
 static int bytes_per_timeslot = 8;
@@ -747,10 +747,11 @@ void read_tracefile(char *filename)
         int src = -1;
         int dst = -1;
         int flow_size_bytes = -1;
-        int timeslot = -1;
+        double time = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d,%d", &flow_id, &isMemFlow, &memType, &src, &dst, &flow_size_bytes, &rreq_bytes, &timeslot) >= 8 && flow_id <= MAX_FLOW_ID / 2)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d,%lf", &flow_id, &isMemFlow, &memType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 8 && flow_id <= MAX_FLOW_ID / 2)
         {
+            int timeslot = (int)(time * 1e9 / timeslot_len);
             initialize_flow(flow_id, isMemFlow, memType, src, dst, flow_size_bytes, rreq_bytes, timeslot);
         }
 

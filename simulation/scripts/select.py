@@ -12,7 +12,7 @@ parser.add_argument('-fo', required=True)
 args = parser.parse_args()
 x = (int)(args.x) 
 ratio = (float)(args.r)
-cnt=20
+cnt=10
 
 
 print("file: {0}, cnt= {1}".format(args.fo,cnt))
@@ -57,10 +57,12 @@ while cnt>0:
         if min_diff < 1000:
             break  # exit early if an exact match is found
 
+mem_sample=mem_sample.astype(str)
+best_net_sample=best_net_sample.astype(str)
 
-ans = np.concatenate((mem_sample, best_net_sample), axis=0)
+ans = pd.DataFrame(np.concatenate((mem_sample, best_net_sample),axis=0))
 print("min diff= ",min_diff,end=", ")
 print(min_idx)
-df = pd.DataFrame(ans)
-df.to_csv(args.fo, header=False, index=False)
+print(ans.shape)
+ans.to_csv(args.fo, header=False, index=False)
 # best_net_sample now holds the rows from net.csv that best match the sum from mem.csv

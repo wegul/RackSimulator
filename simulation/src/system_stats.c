@@ -96,6 +96,7 @@ void write_to_outfile(FILE *fp, flow_t *flow, float timeslot_len, int bandwidth)
     double slowdown = (double)(flow_completion) / (double)(flow->expected_runtime);
     double tput = (double)flow->bytes_received * 8 / (flow->timeslots_active * timeslot_len * 1.0);
     fprintf(fp, "%d,%d,%d,%d,%d,%d,%.2f,%.2f\n", flow_id, flow->isMemFlow, src, dst, bytes_received, flow_completion, slowdown, tput);
+    fflush(fp);
 }
 
 // FILE * open_timeseries_outfile(char * filename) {

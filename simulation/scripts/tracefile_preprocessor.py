@@ -1,3 +1,9 @@
+# Process raw trace file:
+# Map 512 to 64 nodes
+# Give each flow a memType based on -ism 
+# Randomly pick flows as RREQ or WREQ
+# Generate RREQ based on RRESP.
+
 import os
 import random
 import sys
@@ -10,27 +16,26 @@ import pandas as pd
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-fi', required=True)
-    parser.add_argument('-b', default=100)  # bandwidth in Gbps
+    # parser.add_argument('-b', required=True)  # bandwidth in Gbps
     parser.add_argument('-c', default=8)  # packet size, in bytes
     parser.add_argument('-ism', required=True)  # isMem
     parser.add_argument('-fo', required=True)
     args = parser.parse_args()
-    slot_time = (float(args.c) * 8.0) / float(args.b) * 1e-9
+    # slot_time = (float(args.c) * 8.0) / float(args.b) * 1e-9
     filename = args.fi
+    newfilename = args.fo
+
     isMem = (int)(args.ism)
     trace = pd.read_csv(filename, header=None)
 
-    # Change second to timeslot_num
-    timeslots = []
-    start_time_arr = trace.iloc[:, -1].values
-    for time in start_time_arr:
-        slot = (int)(time/slot_time)
-        timeslots.append((str)(slot))
-    trace.iloc[:, -1] = pd.Series(timeslots)
-    # pathList = filename.split('/')
-    # newfilename = pathList[-1]
-    # newfilename = "./proced_workloads/"+newfilename[:-4]+".proced.csv"
-    newfilename = args.fo
+    # # Change second to timeslot_num
+    # timeslots = []
+    # start_time_arr = trace.iloc[:, -1].values
+    # for time in start_time_arr:
+    #     slot = (int)(time/slot_time)
+    #     timeslots.append((str)(slot))
+    # trace.iloc[:, -1] = pd.Series(timeslots)
+    
 
     # Map 512 to 64
     src_arr = trace.iloc[:, 1].values
@@ -51,7 +56,8 @@ def main():
     trace.insert(1, column=None, value=isMem)
 
     # Add MemType
-    flowSize = trace.iloc[:, 4].values
+    flowSize = trace.iloc[:, 4].values.copy()
+    old_flowSize = trace.iloc[:, 4].values.copy()
     memType_arr = []
     if isMem == 1:
         for i in range(0, trace.shape[0]):
@@ -70,11 +76,11 @@ def main():
     reqLen_arr = []
     for i in range(0, len(memType_arr)):
         if memType_arr[i] == 0:
-            reqLen_arr.append(flowSize[i])
+            reqLen_arr.append(old_flowSize[i])
         else:
             reqLen_arr.append(-1)
     trace.insert(6, column=None, value=reqLen_arr)
-    trace.iloc[0:8000, :].to_csv(newfilename, header=False, index=False)
+    trace.to_csv(newfilename, header=False, index=False)
 
 
 def main_obsolete():
