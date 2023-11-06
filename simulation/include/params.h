@@ -54,10 +54,10 @@
 // Queue Size
 #define TOR_UPSTREAM_BUFFER_LEN 50000
 #define TOR_DOWNSTREAM_BUFFER_LEN 50000
-#define TOR_UPSTREAM_MEMBUF_LEN 3 * NODES_PER_RACK // RREQ is 3 block
-#define TOR_DOWNSTREAM_MEMBUF_LEN 3 * NODES_PER_RACK
+#define TOR_UPSTREAM_MEMBUF_LEN 4 * NODES_PER_RACK // RREQ is 3 block + 1-blk Grant
+#define TOR_DOWNSTREAM_MEMBUF_LEN 4 * NODES_PER_RACK
 
-#define LINK_CAPACITY 1024
+#define LINK_CAPACITY 4096
 
 // #define MAX_FLOW_ID 6000000
 #define MAX_FLOW_ID 9999
@@ -69,15 +69,13 @@
 #define TIMEOUT 4000
 #define BLK_SIZE 8
 #define SSTHRESH_START 8192
+#define CWND_START 512
 #define INTERPACKET_GAP 96
 
-extern int16_t ***source_list;
-extern int16_t epoch_len;
 extern volatile int64_t curr_timeslot;
 extern int8_t flow_trace_scanned_completely;
 extern char *ptr;
 extern volatile int64_t total_flows_started;
-extern int64_t num_of_pkt_injected;
 extern volatile int64_t num_of_flows_finished;
 
 #endif
