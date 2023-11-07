@@ -124,9 +124,12 @@ void work_per_timeslot()
             while (mem_pkt)
             {
                 int dst_host = mem_pkt->dst_node;
-                if (tor->downstream_mem_buffer[dst_host]->num_elements > TOR_DOWNSTREAM_MEMBUF_LEN - 5)
+                if (tor->downstream_mem_buffer[dst_host]->num_elements > TOR_DOWNSTREAM_MEMBUF_LEN - 64)
                 {
-                    printf("PROC num: %d, type: %d, time: %d\n", tor->downstream_mem_buffer[dst_host]->num_elements, mem_pkt->memType, curr_timeslot);
+                    printf("flow remain: %d ", flowlist->flows[mem_pkt->flow_id]->flow_size_bytes - mem_pkt->seq_num);
+                    print_packet(mem_pkt);
+                    // printf("PROC num: %d, type: %d, time: %d\n", tor->downstream_mem_buffer[dst_host]->num_elements, mem_pkt->memType, curr_timeslot);
+                    fflush(stdout);
                 }
 
                 assert("TOR PROC OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[dst_host], mem_pkt) != -1);
@@ -298,7 +301,7 @@ void work_per_timeslot()
                             }
                             else if (flow->memType == 1) // RRESP
                             {
-                                if (flow->flow_size_bytes - flow->bytes_sent <= BLK_SIZE) // The last block
+                                if (flow_bytes_remaining <= BLK_SIZE) // The last block
                                 {
                                     mem_pkt->memType = 0x2b;
                                 }
@@ -307,7 +310,7 @@ void work_per_timeslot()
                             }
                             else if (flow->memType == 2) // WREQ
                             {
-                                if (flow->flow_size_bytes - flow->bytes_sent <= BLK_SIZE) // The last block
+                                if (flow_bytes_remaining <= BLK_SIZE) // The last block
                                 {
                                     mem_pkt->memType = 0x2c;
                                 }
@@ -333,10 +336,15 @@ void work_per_timeslot()
                             }
                             flow->active = 1;
                             flow->timeslots_active++;
-                            if (mem_pkt->memType == 0x2b || mem_pkt->memType == 0x2c)
-                            {
-                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = 0;
-                            }
+                            // if (mem_pkt->memType == 0x2b || mem_pkt->memType == 0x2c)
+                            // {
+                            //     if (!flow->released)
+                            //     {
+                            //         flow->released=1;
+                            //         tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = 0;
+                            //     }
+
+                            // }
 
                             // printf("host sent (1,%02x), flowid: %d, cnt: %d, seq:%d, deq: %d\n", mem_pkt->memType, mem_pkt->flow_id, mem_pkt->pkt_id, mem_pkt->seq_num, mem_pkt->time_to_dequeue_from_link);
                         }
@@ -483,11 +491,16 @@ void work_per_timeslot()
                     else // Could be 1a or 1b or 1c or 2b or 2c
                     {
                         assert("TOR RECV OVERFLOW" && pkt_recv(tor->upstream_mem_buffer[tor_port], pkt) != -1);
-                        // flow_t *flow = flowlist->flows[pkt->flow_id];
-                        // if (flow->flow_size_bytes - flow->bytes_sent < 800 * 32 )
+                        flow_t *flow = flowlist->flows[pkt->flow_id];
+                        // if (!flow->released && flow->flow_size_bytes - pkt->seq_num < BLK_SIZE)
                         // {
+                        //     flow->released = 1;
                         //     tor->downstream_mem_buffer_lock[pkt->dst_node] = 0;
                         // }
+                        if (pkt->memType == 0x2b || pkt->memType == 0x2c)
+                        {
+                            tor->downstream_mem_buffer_lock[pkt->dst_node] = 0;
+                        }
                     }
                 }
                 else

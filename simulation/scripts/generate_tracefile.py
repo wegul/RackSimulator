@@ -26,12 +26,14 @@ def main():
                 if (dst != src):
                     for flow in range(host_to_host_flows):
                         isMem = random.randint(0, 1)
+                        isMem=1;
                         flow_size = 10000
                         memType = -1
                         rreq_bytes = -1
                         if isMem == 1:
                             flow_size = random.randint(64, 18000)
                             memType = random.randint(0, 2)
+                            memType = 2
                             if memType == 2:  # WREQ
                                 memType = 999
                             else:  # RREQ

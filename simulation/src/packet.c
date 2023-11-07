@@ -40,7 +40,7 @@ packet_t ack_packet(packet_t pkt, int64_t ack_num)
 
 void print_packet(packet_t self)
 {
-    printf("pkt: src %d dst %d flow %d size %d seq %d ack %d ctrl %d\n", (int)self->src_node, (int)self->dst_node, (int)self->flow_id, (int)self->size, (int)self->seq_num, (int)self->ack_num, (int)self->control_flag);
+    printf("pkt: src %d dst %d flow %d seq %d memType %2x, time: %d\n", (int)self->src_node, (int)self->dst_node, (int)self->flow_id, (int)self->seq_num, (int)self->memType, curr_timeslot);
 }
 
 void free_packet(packet_t self)
