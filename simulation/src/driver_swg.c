@@ -235,6 +235,13 @@ void work_per_timeslot()
             int16_t node_index = node->node_index;
             flow_t *flow = NULL;
             int hasSlctMem = 0;
+            // if (node->current_flow && node->node_index == 28)
+            //     printf("curr %d, currFlow: %d, memtype: %d\n", curr_timeslot, node->current_flow->flow_id, node->current_flow->memType);
+            // else if (node->node_index == 28 && curr_timeslot > 6773 && curr_timeslot < 6794)
+            // {
+            //     printf("curr %d, node 28 curflow empty\n", curr_timeslot);
+            // }
+
             // Check if host has any active mem flows at current moment; and if yes, check if it is granted
             if ((node->active_mem_flows)->num_elements > 0)
             {
@@ -242,87 +249,37 @@ void work_per_timeslot()
                 if (node->current_flow)
                 {
                     // Check if need to put it back
-                    if (!node->current_flow->isMemFlow) // Put back Net
+                    if (node->current_flow->isMemFlow != 1) // Put back Net
                     {
-                        printf("node %d Put back Netflow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
+                        printf("node %d Put back flow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
                         buffer_put(node->active_flows, node->current_flow);
+                        node->current_flow = NULL;
+                    }
+                    else if (node->current_flow->memType == 998) // Put back ungranted WREQ
+                    {
+                        printf("node %d Put back flow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
+                        buffer_put(node->active_mem_flows, node->current_flow);
                         node->current_flow = NULL;
                     }
                     else // Current flow is granted mem or RREQ, shall check if there are any RREQ, if send RREQ, else, send CurrFlow
                     {
-                        if (node->current_flow->memType == 998) // Put back ungranted WREQ
-                        {
-                            printf("node %d Put back flow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
-                            buffer_put(node->active_mem_flows, node->current_flow);
-                            node->current_flow = NULL;
-                        }
-                        else if (node->current_flow->memType == 0) // Send RREQ
-                        {
-                            // printf("Select %d, memType: %d, curr: %d\n", node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
-                            hasSlctMem = 1;
-                        }
-                        else // CurrFlow is grated WREQ or RRESP. Look for RREQ, if not, keep current.
-                        {
-                            hasSlctMem = 1;
-                            // Peek Traverse to see if there is a RREQ
-                            for (int j = 0; j < (node->active_mem_flows)->num_elements; j++)
-                            {
-                                flow_t *peek_flow = (flow_t *)buffer_peek(node->active_mem_flows, j);
-                                if (peek_flow->memType == 0)
-                                {
-                                    printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, peek_flow->flow_id, peek_flow->memType, curr_timeslot);
-                                    node->current_flow = buffer_remove(node->active_mem_flows, j);
-                                    break;
-                                }
-                            }
-                        }
+                        // printf("Select %d, memType: %d, curr: %d\n", node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
+                        hasSlctMem = 1;
                     }
                 }
-                else
+                if (node->current_flow == NULL)
                 {
-                    int slctID = -1, slctType = 1000; // Priority RREQ(0) > WREQ (999) > RRESP (1) > WREQ(2)
                     // Peek Traverse to see if there is a granted(1/2) or need-to-notify(0/999) mem flow, choose this flow
                     for (int j = 0; j < (node->active_mem_flows)->num_elements; j++)
                     {
                         flow_t *peek_flow = (flow_t *)buffer_peek(node->active_mem_flows, j);
-                        if (peek_flow->memType == 0)
+                        if (peek_flow->memType != 998)
                         {
-                            if (slctType != 0)
-                            {
-                                slctID = j;
-                                slctType = peek_flow->memType;
-                            }
+                            printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, peek_flow->flow_id, peek_flow->memType, curr_timeslot);
+                            node->current_flow = buffer_remove(node->active_mem_flows, j);
+                            hasSlctMem = 1;
+                            break;
                         }
-                        else if (peek_flow->memType == 999)
-                        {
-                            if (slctType != 0 && slctType != 999)
-                            {
-                                slctID = j;
-                                slctType = peek_flow->memType;
-                            }
-                        }
-                        else if (peek_flow->memType == 1)
-                        {
-                            if (slctType != 0 && slctType != 999 && slctType != 1)
-                            {
-                                slctID = j;
-                                slctType = peek_flow->memType;
-                            }
-                        }
-                        else if (peek_flow->memType == 2)
-                        {
-                            if (slctType != 0 && slctType != 999 && slctType != 1 && slctType != 2)
-                            {
-                                slctID = j;
-                                slctType = peek_flow->memType;
-                            }
-                        }
-                    }
-                    if (slctID >= 0)
-                    {
-                        printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, slctID, slctType, curr_timeslot);
-                        node->current_flow = buffer_remove(node->active_mem_flows, slctID);
-                        hasSlctMem = 1;
                     }
                 }
             }
