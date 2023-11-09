@@ -4,7 +4,7 @@ flow_t *create_flow(int64_t flow_id, int64_t flow_size_bytes, int16_t host_index
 {
     flow_t *self = (flow_t *)malloc(sizeof(flow_t));
     MALLOC_TEST(self, __LINE__);
-    // self->released = 0;
+    self->released = 0;
     self->isMemFlow = 0;
     self->active = 0;
     self->finished = 0;

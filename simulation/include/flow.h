@@ -9,7 +9,7 @@ typedef struct flow
     int isMemFlow;
     int memType; // -1 for invalid; 0=RREQ, 1=RRESP, 2=WREQ_granted, 999=WREQ_ungranted, 998=WREQ_ungranted_but_notified
     int rreq_bytes;
-    // int released;
+    int released;
 
     int8_t active;
     int8_t finished;

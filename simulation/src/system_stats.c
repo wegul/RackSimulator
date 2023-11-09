@@ -78,7 +78,7 @@ FILE *open_outfile(char *filename)
     strncat(out_filename, filename, 500);
     FILE *out_fp = fopen(out_filename, "w");
     assert(out_fp != NULL);
-    fprintf(out_fp, "FlowID,Type,Src,Dst,FlowSize,FCT,Slowdown,Xput\n");
+    fprintf(out_fp, "FlowID,isMem,memType,Src,Dst,FlowSize,Create,Start,Finish,FCT,Slowdown,Xput\n");
     return out_fp;
 }
 
@@ -92,10 +92,13 @@ void write_to_outfile(FILE *fp, flow_t *flow, float timeslot_len, int bandwidth)
     int dst = (int)flow->dst;
     int bytes_received = (int)flow->bytes_received;
     // double flow_completion = (double)flow->finish_timeslot * sec_per_timeslot;
+    int start_time = flow->start_timeslot;
+    int finish_time = flow->finish_timeslot;
     int flow_completion = flow->finish_timeslot - flow->timeslot;
     double slowdown = (double)(flow_completion) / (double)(flow->expected_runtime);
     double tput = (double)flow->bytes_received * 8 / (flow->timeslots_active * timeslot_len * 1.0);
-    fprintf(fp, "%d,%d,%d,%d,%d,%d,%.2f,%.2f\n", flow_id, flow->isMemFlow, src, dst, bytes_received, flow_completion, slowdown, tput);
+    fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f\n",
+            flow_id, flow->isMemFlow, flow->memType, src, dst, bytes_received, flow->timeslot, start_time, finish_time, flow_completion, slowdown, tput);
     fflush(fp);
 }
 
