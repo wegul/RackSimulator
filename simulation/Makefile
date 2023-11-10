@@ -6,7 +6,7 @@ BINDIR = bin
 INCLUDEDIR = include
 LIBDIR = lib
 
-CFLAGS = -O3 -std=gnu99 -g -Wall -I$(INCLUDEDIR)
+CFLAGS = -std=gnu99 -g -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 
 #CFLAGS += -DDEBUG_DRIVER
