@@ -11,6 +11,7 @@ typedef struct flow
     int rreq_bytes;
     int released;
     int grantTime;
+    int notifTime;
 
     int8_t active;
     int8_t finished;

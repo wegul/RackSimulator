@@ -83,34 +83,66 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         // ToR -- PROCESS
         /*---------------------------------------------------------------------------*/
-
         tor_t tor = tors[0];
         int16_t tor_index = 0;
-        // Peek traverse NotificationQueue and give GRANT
         for (int i = 0; i < MAX_FLOW_ID; i++)
         {
             notif_t ntf = tor->notif_queue[i];
             if (!ntf->isGranted && ntf->req_type >= 0) // Notification Requests for buffer
             {
-                // Check if available: only grant one sender per DOWNSTREAM port
-                if (!tor->downstream_mem_buffer_lock[ntf->receiver])
+                // Check if available: only grant ONE sender ONE DOWNSTREAM port
+                // 1. Check if port available
+                if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
                 {
-                    // printf("Grant to %d, flow: %d, type: %d, curr: %d\n", ntf->sender, i, ntf->req_type, curr_timeslot);
-                    tor->ntf_cnt--;
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = 1;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
-                    grant->isMemPkt = 1;
-                    grant->memType = 200;
-                    grant->req_len = ntf->length;
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
-#ifdef RECORD_PACKETS
-                    fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, grant\n", (int)grant->flow_id, (int)grant->src_node, (int)grant->dst_node, (int)grant->dst_node, (int)(curr_timeslot), (int)grant->time_when_transmitted_from_src);
-#endif
+                    int valid = 1;
+                    // 2. Check if the sender is valid
+                    for (int j = 0; j < NODES_PER_RACK; j++)
+                    {
+                        if (tor->downstream_mem_buffer_lock[j] == ntf->sender)
+                        {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (valid)
+                    {
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        ntf->isGranted = 1;
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
+                        grant->isMemPkt = 1;
+                        grant->memType = 200;
+                        grant->req_len = ntf->length;
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
+        // Peek traverse NotificationQueue and give GRANT
+        //         for (int i = 0; i < MAX_FLOW_ID; i++)
+        //         {
+        //             notif_t ntf = tor->notif_queue[i];
+        //             if (!ntf->isGranted && ntf->req_type >= 0) // Notification Requests for buffer
+        //             {
+        //                 // Check if available: only grant one sender per DOWNSTREAM port
+        //                 if (!tor->downstream_mem_buffer_lock[ntf->receiver])
+        //                 {
+        //                     // printf("Grant to %d, flow: %d, type: %d, curr: %d\n", ntf->sender, i, ntf->req_type, curr_timeslot);
+        //                     tor->ntf_cnt--;
+        //                     ntf->isGranted = 1;
+        //                     tor->downstream_mem_buffer_lock[ntf->receiver] = 1;
+        //                     // Send grant to future msg_sender
+        //                     packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
+        //                     grant->isMemPkt = 1;
+        //                     grant->memType = 200;
+        //                     grant->req_len = ntf->length;
+        //                     assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+        // #ifdef RECORD_PACKETS
+        //                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, grant\n", (int)grant->flow_id, (int)grant->src_node, (int)grant->dst_node, (int)grant->dst_node, (int)(curr_timeslot), (int)grant->time_when_transmitted_from_src);
+        // #endif
+        //                 }
+        //             }
+        //         }
 
         // //================Shortest msg first================
         // for (int recver = 0; recver < NODES_PER_RACK; recver++)
@@ -158,14 +190,6 @@ void work_per_timeslot()
             while (mem_pkt)
             {
                 int dst_host = mem_pkt->dst_node;
-                // if (tor->downstream_mem_buffer[dst_host]->num_elements > TOR_DOWNSTREAM_MEMBUF_LEN - 64)
-                // {
-                //     // printf("flow remaining: %d ", flowlist->flows[mem_pkt->flow_id]->flow_size_bytes - mem_pkt->seq_num);
-                //     print_packet(mem_pkt);
-                //     // printf("PROC num: %d, type: %d, time: %d\n", tor->downstream_mem_buffer[dst_host]->num_elements, mem_pkt->memType, curr_timeslot);
-                //     fflush(stdout);
-                // }
-
                 assert("TOR PROC OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[dst_host], mem_pkt) != -1);
                 // printf("tor recv (%d), cnt: %d %d-%d, flowid: %d, curr: %d\n", mem_pkt->isMemPkt, mem_pkt->pkt_id, mem_pkt->src_node, mem_pkt->dst_node, mem_pkt->flow_id, curr_timeslot);
 #ifdef RECORD_PACKETS
@@ -330,6 +354,7 @@ void work_per_timeslot()
                     if (flow->memType == 999)
                     {
                         flow->memType--; // Notified
+                        flow->notifTime = curr_timeslot;
                         // printf("Flow %d send WREQ Notif %d to %d, curr: %d\n", flow->flow_id, flow->src, flow->dst, curr_timeslot);
                         // Push a Notification in link.
                         packet_t ntf_pkt = create_packet(src_node, dst_node, flow_id, BLK_SIZE, -1, packet_counter++);
@@ -364,6 +389,7 @@ void work_per_timeslot()
                                 {
                                     mem_pkt->memType = 0x0a; // RREQ header
                                     mem_pkt->req_len = flow->rreq_bytes;
+                                    flow->notifTime = curr_timeslot;
                                 }
                             }
                             else if (flow->memType == 1) // RRESP
@@ -407,7 +433,7 @@ void work_per_timeslot()
 
                             if (mem_pkt->memType == 0x2b || mem_pkt->memType == 0x2c)
                             {
-                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = 0;
+                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = -1;
                             }
                             if (flow->flow_size_bytes - flow->bytes_sent < 1) // Finished sending...
                             {

@@ -14,7 +14,7 @@ tor_t create_tor(int16_t tor_index)
 
         self->upstream_mem_buffer[i] = create_buffer(TOR_DOWNSTREAM_MEMBUF_LEN);
         self->downstream_mem_buffer[i] = create_buffer(TOR_UPSTREAM_MEMBUF_LEN);
-        self->downstream_mem_buffer_lock[i] = 0;
+        self->downstream_mem_buffer_lock[i] = -1;
     }
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
