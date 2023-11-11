@@ -5,9 +5,8 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
 {
     packet_t self = (packet_t)malloc(sizeof(struct packet));
     MALLOC_TEST(self, __LINE__);
-    self->isMemPkt = 0; // Default Net packet
-    self->memType = -1;
-    self->req_len = -1; // Default
+    self->pktType = 0; // Default Net packet
+    self->reqLen = -1; // Default
 
     self->src_node = src_node;
     self->dst_node = dst_node;
@@ -40,7 +39,7 @@ packet_t ack_packet(packet_t pkt, int64_t ack_num)
 
 void print_packet(packet_t self)
 {
-    printf("pkt: src %d dst %d flow %d seq %d memType %2x, time: %d\n", (int)self->src_node, (int)self->dst_node, (int)self->flow_id, (int)self->seq_num, (int)self->memType, curr_timeslot);
+    printf("pkt: src %d dst %d flow %d seq %d memType %2x, time: %d\n", (int)self->src_node, (int)self->dst_node, (int)self->flow_id, (int)self->seq_num, (int)self->pktType, curr_timeslot);
 }
 
 void free_packet(packet_t self)

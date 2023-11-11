@@ -52,34 +52,33 @@ def main():
     # trace.iloc[:, 1] = pd.Series(new_src)
     # trace.iloc[:, 2] = pd.Series(new_dst)
 
-    # add isMem
-    trace.insert(1, column=None, value=isMem)
+    # add flowType
+    # trace.insert(1, column=None, value=isMem)
 
-    # Add MemType
-    flowSize = trace.iloc[:, 4].values.copy()
-    old_flowSize = trace.iloc[:, 4].values.copy()
-    memType_arr = []
+    # Add flowType
+    flowSize = trace.iloc[:, 3].values.copy()
+    old_flowSize = trace.iloc[:, 3].values.copy()
+    flowType_arr = []
     if isMem == 1:
         for i in range(0, trace.shape[0]):
-            memType = random.randint(0, 1)
-            if memType == 1:
-                memType = 999
-            else:
-                flowSize[i] = 24
-            memType_arr.append(memType)
+            flowType = random.randint(2, 3)
+            if flowType == 2: # Change to RREQ
+                flowType = 1
+                flowSize[i] =24                
+            flowType_arr.append(flowType)
     else:
-        memType_arr = [-1]*trace.shape[0]
-    trace.iloc[:, 4] = pd.Series(flowSize)
-    trace.insert(2, column=None, value=memType_arr)
+        flowType_arr = [-1]*trace.shape[0]
+    trace.iloc[:, 3] = pd.Series(flowSize)
+    trace.insert(1, column=None, value=flowType_arr)
 
     # Add ReqLen
     reqLen_arr = []
-    for i in range(0, len(memType_arr)):
-        if memType_arr[i] == 0:
+    for i in range(0, len(flowType_arr)):
+        if flowType_arr[i] == 1:
             reqLen_arr.append(old_flowSize[i])
         else:
             reqLen_arr.append(-1)
-    trace.insert(6, column=None, value=reqLen_arr)
+    trace.insert(5, column=None, value=reqLen_arr)
     trace.to_csv(newfilename, header=False, index=False)
 
 

@@ -11,7 +11,7 @@ struct node
     int16_t node_index;
 
     buffer_t *active_flows;
-    buffer_t *active_mem_flows;
+    // buffer_t *active_mem_flows;
     flow_t *current_flow;
 
     // As a sender

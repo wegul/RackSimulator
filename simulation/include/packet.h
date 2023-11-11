@@ -5,11 +5,21 @@
 
 struct packet
 {
-    int isMemPkt;
-    int memType; // -1 for invalid;
-    /*             0a=RREQ_1st,              1a=RREQ, 1b=RRESP, 1c=WREQ;
-    FOR WREQ ONLY: 0x0c=Notif, 200=Grant*/
-    int req_len;
+    int pktType;
+    /*
+        -1 = invalid
+        1: RREQ (only the firstBLK)              = RREQ
+        2: RRESP
+        3: WREQ                                 = WREQ
+        4+: Notification
+        5+: Grant
+        100: net                                  = NET
+    */
+    // int isMemPkt;
+    // int memType; // -1 for invalid;
+    // /*             0a=RREQ_1st,              1a=RREQ, 1b=RRESP, 1c=WREQ;
+    // FOR WREQ ONLY: 0x0c=Notif, 200=Grant*/
+    int reqLen; // If it is a nofitication or grant, it'll have a req_len.
 
     int16_t src_node;
     int16_t dst_node;

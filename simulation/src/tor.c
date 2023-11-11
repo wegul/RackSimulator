@@ -22,8 +22,8 @@ tor_t create_tor(int16_t tor_index)
     }
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
-        self->notif_queue[i]->req_type = -1;
-        self->notif_queue[i]->length = -1;
+        self->notif_queue[i]->reqFlowID = -1;
+        self->notif_queue[i]->reqLen = -1;
         self->notif_queue[i]->isGranted = 0;
         self->notif_queue[i]->sender = -1;
         self->notif_queue[i]->receiver = -1;

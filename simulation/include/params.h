@@ -34,7 +34,17 @@
         printf("error: %s:%d malloc() failed\n", __FILE__, line_num); \
         exit(0);                                                      \
     }
+#define RREQ_TYPE 1
+#define RRESP_TYPE 2
+#define WREQ_TYPE 3
+#define NTF_TYPE 4
+#define GRT_TYPE 5
+#define NET_TYPE 100
 
+#define NOTIF_STATE 1
+#define WAITING_STATE -1
+#define GRANTED_STATE 10
+#define NET_STATE (int)100
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define OVERSUBSCRIPTION 1

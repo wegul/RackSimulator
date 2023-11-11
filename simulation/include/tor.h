@@ -9,8 +9,9 @@
 #include "memory.h"
 struct notification
 {
-    int req_type; // -1=invalid; 0=RREQ, 2=WREQ
-    int length;   // reqLen
+    // int reqType; // -1=invalid; 0=RREQ, 2=WREQ
+    int reqLen;
+    int reqFlowID;
     int isGranted;
     int sender; // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
     int receiver;

@@ -6,12 +6,40 @@
 
 typedef struct flow
 {
-    int isMemFlow;
-    int memType; // -1 for invalid; 0=RREQ, 1=RRESP, 2=WREQ_granted, 999=WREQ_ungranted, 998=WREQ_ungranted_but_notified
-    int rreq_bytes;
-    int released;
+    /*
+    Calculate priority: memType * grantState. The smaller, the superior.
+
+    flowType: Read from TraceFile at initialize_flow(). Aligned with PKT->pktType
+        -1 = initial
+        1: RREQ (highest priority)              = RREQ
+        2: RESP
+        3: WREQ                                 = WREQ
+        100: net                                = NET
+
+    grantState: given at runtime, but the first one is initialized by trace file.
+        1 = waiting to send NOTIF
+        -1 = notified, waiting for grant, CANNOT SEND
+        10 = granted, can send
+        100 = net, can send
+
+        Possible product could be:
+            2: RRESP-waiting to send NOTIF          = RNTF (initialize)
+            -2: RRESP-notified, waiting for grant   = RWAIT
+            20: RRESP-granted, can send             = RGRANTED
+
+            3: WREQ-waiting to send NOTIF           = WNTF (initialize)
+            -3: WREQ-notified, waiting for grant    = WWAIT
+            30: WREQ-granted, can send              = WGRANTED
+
+            100*100: net cansend                    = NETSEND
+    */
+    int flowType;
+    int grantState;
+
+    int rreq_bytes; // if this is a RREQ, then this means it is the request length.
     int grantTime;
     int notifTime;
+    // int num_chunks; // If this is a RREQ, then num_chunks = reqLen/chunkSize; Else, num_chunks = flowSize/chunkSize
 
     int8_t active;
     int8_t finished;
