@@ -6,7 +6,7 @@ flow_t *create_flow(int64_t flow_id, int64_t flow_size_bytes, int16_t host_index
     MALLOC_TEST(self, __LINE__);
     self->grantTime = -1;
     self->notifTime = -1;
-
+    self->quota = -1;
     self->active = 0;
     self->finished = 0;
     self->flow_id = flow_id;

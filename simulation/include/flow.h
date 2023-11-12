@@ -35,6 +35,7 @@ typedef struct flow
     */
     int flowType;
     int grantState;
+    int quota;//The number of bytes that can be sent in current granted chunk
 
     int rreq_bytes; // if this is a RREQ, then this means it is the request length.
     int grantTime;

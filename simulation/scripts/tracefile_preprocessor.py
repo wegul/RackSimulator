@@ -67,7 +67,7 @@ def main():
                 flowSize[i] =24                
             flowType_arr.append(flowType)
     else:
-        flowType_arr = [-1]*trace.shape[0]
+        flowType_arr = [100]*trace.shape[0]
     trace.iloc[:, 3] = pd.Series(flowSize)
     trace.insert(1, column=None, value=flowType_arr)
 

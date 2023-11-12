@@ -8,12 +8,12 @@ struct packet
     int pktType;
     /*
         -1 = invalid
-        1: RREQ (only the firstBLK)              = RREQ
-        2: RRESP
-        3: WREQ                                 = WREQ
-        4+: Notification
-        5+: Grant
-        100: net                                  = NET
+        1: RREQ (only the firstBLK) (defined by trace)              = RREQ
+        2: RRESP (created upon host receiving RREQ)
+        3: WREQ         (defined by trace)                        = WREQ
+        4+: Notification (created by host)
+        5+: Grant (created by TOR)
+        100: net (defined by trace)                                 = NET
     */
     // int isMemPkt;
     // int memType; // -1 for invalid;

@@ -40,7 +40,7 @@
 #define NTF_TYPE 4
 #define GRT_TYPE 5
 #define NET_TYPE 100
-
+#define CHUNK_SIZE 8192
 #define NOTIF_STATE 1
 #define WAITING_STATE -1
 #define GRANTED_STATE 10
