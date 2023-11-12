@@ -690,11 +690,11 @@ void work_per_timeslot()
                 terminate0 = 1;
             }
         }
-        // if (total_flows_started >= flowlist->num_flows)
-        // {
-        //     printf("\n======== All %d flows started ========\n\n", (int)total_flows_started);
-        //     terminate1 = 1;
-        // }
+        if (total_flows_started >= flowlist->num_flows)
+        {
+            printf("\n======== All %d flows started ========\n\n", (int)total_flows_started);
+            terminate1 = 1;
+        }
         if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5)
         {
             int completed_flows = 0;
