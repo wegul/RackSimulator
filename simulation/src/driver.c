@@ -78,87 +78,92 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         tor_t tor = tors[0];
         int16_t tor_index = 0;
-        for (int i = 0; i < MAX_FLOW_ID; i++)
-        {
-            notif_t ntf = tor->notif_queue[i];
-            if (ntf->isGranted == 0 && ntf->reqFlowID >= 0) // Notification Requests for buffer
-            {
-                if (curr_timeslot > 322845)
-                {
-                    int b = 6;
-                }
-                // assert(curr_timeslot < 322855);
-                // Check if available: only grant ONE sender ONE DOWNSTREAM port
-                // 1. Check if port available
-                if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
-                {
-                    int valid = 1;
-                    // 2. Check if the sender is valid
-                    for (int j = 0; j < NODES_PER_RACK; j++)
-                    {
-                        if (tor->downstream_mem_buffer_lock[j] == ntf->sender)
-                        {
-                            // if (curr_timeslot > 322851)
-                            // {
-                            //     printf("while granting host %d for flow %d, found it had port %d\n", ntf->sender, ntf->reqFlowID, j);
-                            // }
-                            valid = 0;
-                            break;
-                        }
-                    }
-                    if (valid)
-                    {
-                        // assert(curr_timeslot < 406345);
-                        printf("Grant to %d, flow: %d,  curr: %d\n", ntf->sender, i, curr_timeslot);
-                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                        ntf->isGranted = 1;
-                        // Send grant to future msg_sender
-                        packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
-                        grant->pktType = GRT_TYPE;
-                        grant->reqLen = ntf->reqLen;
-                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
-                    }
-                }
-            }
-        }
-
-        // //================Shortest msg first================
-        // for (int recver = 0; recver < NODES_PER_RACK; recver++)
+        // for (int i = 0; i < MAX_FLOW_ID; i++)
         // {
-        //     if (!tor->downstream_mem_buffer_lock[recver])
+        //     notif_t ntf = tor->notif_queue[i];
+        //     if (ntf->isGranted == 0 && ntf->reqFlowID >= 0) // Notification Requests for buffer
         //     {
-        //         // Send the smallest notification
-        //         int min_reqLen = INT32_MAX - 1, min_idx = -1;
-        //         for (int i = 0; i < MAX_FLOW_ID; i++)
+        //         // Check if available: only grant ONE sender ONE DOWNSTREAM port
+        //         // 1. Check if port available
+        //         if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
         //         {
-        //             notif_t ntf = tor->notif_queue[i];
-        //             if (!ntf->isGranted && ntf->req_type >= 0 && ntf->receiver == recver)
+        //             int legal = 1;
+        //             // 2. Check if the sender is legal
+        //             for (int j = 0; j < NODES_PER_RACK; j++)
         //             {
-        //                 if (ntf->length < min_reqLen)
+        //                 if (tor->downstream_mem_buffer_lock[j] == ntf->sender)
         //                 {
-        //                     min_reqLen = ntf->length;
-        //                     min_idx = i;
+        //                     legal = 0;
+        //                     break;
         //                 }
         //             }
-        //         }
-        //         // Grant the shortest
-        //         if (min_idx >= 0)
-        //         {
-        //             notif_t ntf = tor->notif_queue[min_idx];
-        //             // printf("Grant to %d, curr: %d\n", ntf->sender, curr_timeslot);
-        //             tor->ntf_cnt--;
-        //             ntf->isGranted = 1;
-        //             tor->downstream_mem_buffer_lock[recver] = 1;
-        //             // Send grant to future msg_sender
-        //             packet_t grant = create_packet(ntf->receiver, ntf->sender, min_idx, BLK_SIZE, -1, packet_counter++);
-        //             grant->isMemPkt = 1;
-        //             grant->memType = 200;
-        //             grant->req_len = ntf->length;
-        //             assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+        //             if (legal)
+        //             {
+        //                 printf("Grant to %d, flow: %d,  curr: %d\n", ntf->sender, i, curr_timeslot);
+        //                 tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+        //                 ntf->isGranted = 1;
+        //                 // Send grant to future msg_sender
+        //                 packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
+        //                 grant->pktType = GRT_TYPE;
+        //                 grant->reqLen = ntf->reqLen;
+        //                 assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+        //             }
         //         }
         //     }
         // }
-        // //================end================
+
+        //================Shortest msg first================
+        // Generate LEGAL_ARR
+        int legal_arr[NODES_PER_RACK];
+        for (int sender = 0; sender < NODES_PER_RACK; sender++)
+        {
+            legal_arr[sender] = 1;
+            for (int j = 0; j < NODES_PER_RACK; j++)
+            {
+                if (tor->downstream_mem_buffer_lock[j] == sender)
+                {
+                    legal_arr[sender] = 0;
+                    break;
+                }
+            }
+        }
+        for (int recver = 0; recver < NODES_PER_RACK; recver++)
+        {
+            // Check the port is available
+            if (tor->downstream_mem_buffer_lock[recver] < 0)
+            {
+                // Choose the smallest notification among all legal notifs
+                int min_reqLen = INT32_MAX - 1, min_idx = -1;
+                for (int i = 0; i < MAX_FLOW_ID; i++)
+                {
+                    notif_t ntf = tor->notif_queue[i];
+                    // 1.Check if this SENDER is legal.
+                    if (legal_arr[ntf->sender] && ntf->isGranted == 0 && ntf->reqFlowID >= 0 && ntf->receiver == recver)
+                    {
+                        // 2. Choose smallest
+                        if (ntf->reqLen < min_reqLen)
+                        {
+                            min_reqLen = ntf->reqLen;
+                            min_idx = i;
+                        }
+                    }
+                }
+                // Grant the shortest
+                if (min_idx >= 0)
+                {
+                    notif_t ntf = tor->notif_queue[min_idx];
+                    printf("Grant to %d, flow: %d,  curr: %d\n", ntf->sender, min_idx, curr_timeslot);
+                    tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                    ntf->isGranted = 1;
+                    // Send grant to future msg_sender
+                    packet_t grant = create_packet(ntf->receiver, ntf->sender, min_idx, BLK_SIZE, -1, packet_counter++);
+                    grant->pktType = GRT_TYPE;
+                    grant->reqLen = ntf->reqLen;
+                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                }
+            }
+        }
+        //================end================
 
         // Forwarding: extract from ingress port (UPTREAM) to egress port (DOWNSTREAM)
         for (int j = 0; j < NODES_PER_RACK; j++)
