@@ -628,7 +628,7 @@ void work_per_timeslot()
                                         rresp_flow->flowType = RRESP_TYPE;
                                         rresp_flow->grantState = GRANTED_STATE; // initial as granted
                                         rresp_flow->quota = pkt->reqLen;
-                                        rresp_flow->expected_runtime = rresp_flow->flow_size_bytes / BLK_SIZE + 3 + 4 * per_hop_propagation_delay_in_timeslots; // Extra 3block of RREQ and its propagation delay
+                                        rresp_flow->expected_runtime = rresp_flow->flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + flow->expected_runtime; // Extra 3block of RREQ and its propagation delay
                                         flow->grantTime = curr_timeslot;
                                         rresp_flow->notifTime = flow->timeslot; // For stat purpose, the FCT of RRESP should be sum of its RREQ and itself.
                                         rresp_flow->grantTime = curr_timeslot;

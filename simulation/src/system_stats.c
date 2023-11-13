@@ -95,7 +95,7 @@ void write_to_outfile(FILE *fp, flow_t *flow, float timeslot_len, int bandwidth)
     int start_time = flow->start_timeslot;
     int finish_time = flow->finish_timeslot;
     int flow_completion = flow->finish_timeslot - flow->timeslot;
-    if (flow->flowType == RREQ_TYPE)
+    if (flow->flowType == RRESP_TYPE)
     {
         flow_completion = flow->finish_timeslot - flow->notifTime;
     }
