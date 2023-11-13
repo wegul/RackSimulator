@@ -10,10 +10,11 @@
 struct notification
 {
     // int reqType; // -1=invalid; 0=RREQ, 2=WREQ
-    int reqLen;
+    int remainingReqLen; // Total remaining # of bytes that will be send
+    int curQuota;        // Remaining bytes of current distribution
     int reqFlowID;
-    int isGranted;
-    int sender; // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
+    int isGranted; // Denote that this grant is sent out and that the quota has not run out yet.
+    int sender;    // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
     int receiver;
 };
 typedef struct notification *notif_t;

@@ -35,12 +35,12 @@ typedef struct flow
     */
     int flowType;
     int grantState;
-    int quota;//The number of bytes that can be sent in current granted chunk
+    int quota; // The number of bytes that can be sent in current granted chunk
 
     int rreq_bytes; // if this is a RREQ, then this means it is the request length.
-    int grantTime;
-    int notifTime;
-    // int num_chunks; // If this is a RREQ, then num_chunks = reqLen/chunkSize; Else, num_chunks = flowSize/chunkSize
+    int rrespPairFlowID; // If this is a RREQ, then it should have a paired rresp.
+    int grantTime;  // Time of the FIRST grant at ToR
+    int notifTime;  // Time of notif at HOST.
 
     int8_t active;
     int8_t finished;

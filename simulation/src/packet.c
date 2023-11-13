@@ -5,8 +5,8 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
 {
     packet_t self = (packet_t)malloc(sizeof(struct packet));
     MALLOC_TEST(self, __LINE__);
-    self->pktType = 0; // Default Net packet
-    self->reqLen = -1; // Default
+    self->pktType = NET_TYPE; // Default Net packet
+    self->reqLen = -1;        // Default
 
     self->src_node = src_node;
     self->dst_node = dst_node;

@@ -40,7 +40,7 @@
 #define NTF_TYPE 4
 #define GRT_TYPE 5
 #define NET_TYPE 100
-#define CHUNK_SIZE 8192
+#define CHUNK_SIZE 2048
 #define NOTIF_STATE 1
 #define WAITING_STATE -1
 #define GRANTED_STATE 10
@@ -77,6 +77,7 @@
 #define ECN_WIDTH 1500
 #define TIMEOUT 4000
 #define BLK_SIZE 8
+#define ETH_MTU 1500
 #define SSTHRESH_START 8192
 #define CWND_START 512
 #define INTERPACKET_GAP 96

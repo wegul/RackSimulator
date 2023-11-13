@@ -15,11 +15,10 @@ struct packet
         5+: Grant (created by TOR)
         100: net (defined by trace)                                 = NET
     */
-    // int isMemPkt;
-    // int memType; // -1 for invalid;
-    // /*             0a=RREQ_1st,              1a=RREQ, 1b=RRESP, 1c=WREQ;
-    // FOR WREQ ONLY: 0x0c=Notif, 200=Grant*/
-    int reqLen; // If it is a nofitication or grant, it'll have a req_len.
+    int reqLen; /*If it is a nofitication or grant, it'll have a req_len.
+                If a NTF or RREQ, this is total # of bytes that will be send
+                Else it is a GRT, this is min(total remain #, CHUNKSIZE)*/
+    
 
     int16_t src_node;
     int16_t dst_node;
