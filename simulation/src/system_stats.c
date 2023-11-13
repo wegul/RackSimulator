@@ -14,7 +14,7 @@ void print_network_tput(int64_t total_bytes, int64_t total_pkts, int64_t ns)
 {
     printf("Total bytes received: %ld B\n", total_bytes);
     printf("Full Network Throughput: %0.2f Gbps\n", (double)total_bytes * 8 / ns);
-    printf("Packets per ns: %0.2f ppns\n", (double)total_pkts / ns);
+    printf("Packets per ns: %0.2f p pns\n", (double)total_pkts / ns);
 }
 
 // void print_cache_stats(int64_t cache_misses, int64_t cache_hits)
@@ -95,6 +95,11 @@ void write_to_outfile(FILE *fp, flow_t *flow, float timeslot_len, int bandwidth)
     int start_time = flow->start_timeslot;
     int finish_time = flow->finish_timeslot;
     int flow_completion = flow->finish_timeslot - flow->timeslot;
+    if (flow->flowType == RREQ_TYPE)
+    {
+        flow_completion = flow->finish_timeslot - flow->notifTime;
+    }
+
     double slowdown = (double)(flow_completion) / (double)(flow->expected_runtime);
     double tput = (double)flow->bytes_received * 8 / (flow->timeslots_active * timeslot_len * 1.0);
     fprintf(fp, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f\n",

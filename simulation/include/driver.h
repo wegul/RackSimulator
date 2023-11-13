@@ -25,6 +25,15 @@ void open_switch_outfiles(char *base_filename);
 void open_host_outfiles(char *base_filename);
 int calculate_priority(flow_t *flow)
 {
+    if (flow->flowType == RREQ_TYPE) // Check token
+    {
+        node_t node = nodes[flow->src];
+        if (node->tokenArr[flow->dst] == 0) // No token
+        {
+            return -1;
+        }
+    }
+
     return (flow->flowType * flow->grantState);
 };
 

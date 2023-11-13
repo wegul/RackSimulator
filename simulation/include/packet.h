@@ -13,6 +13,7 @@ struct packet
         3: WREQ         (defined by trace)                        = WREQ
         4+: Notification (created by host)
         5+: Grant (created by TOR)
+        6+: Token (readGrant)
         100: net (defined by trace)                                 = NET
     */
     int reqLen; /*If it is a nofitication or grant, it'll have a req_len.

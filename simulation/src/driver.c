@@ -72,6 +72,23 @@ void work_per_timeslot()
                 buffer_put(nodes[src]->active_flows, flow);
             }
         }
+        /*---------------------------------------------------------------------------*/
+        // Bounding concurrent flows
+        /*---------------------------------------------------------------------------*/
+        for (int i = 0; i < NODES_PER_RACK; i++)
+        {
+            node_t node = nodes[i];
+            int flowCnt = 0;
+            for (int j = 0; j < node->active_flows->num_elements; j++)
+            {
+                flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
+                if (flow->flowType != NET_TYPE)
+                {
+                    flowCnt++;
+                }
+                assert("More than 200 concurrent flows!" && flowCnt < 200);
+            }
+        }
 
         /*---------------------------------------------------------------------------*/
         // ToR -- PROCESS
@@ -344,6 +361,7 @@ void work_per_timeslot()
                                 }
                                 else
                                 {
+                                    node->tokenArr[flow->dst] = 0; // Consume one token.
                                     printf("Flow %d send RREQ Notif %d to %d, curr: %d\n", flow->flow_id, flow->src, flow->dst, curr_timeslot);
                                     mem_pkt->pktType = RREQ_TYPE; // RREQ header
                                     mem_pkt->reqLen = flow->rreq_bytes;
@@ -470,6 +488,13 @@ void work_per_timeslot()
                         tor->notif_queue[pkt->flow_id]->isGranted = 0;
                     }
                 }
+                else if (pkt->pktType == RREQ_TYPE) // Give a Token.
+                {
+                    packet_t token_pkt = create_packet(pkt->dst_node, pkt->src_node, pkt->flow_id, BLK_SIZE, -1, packet_counter++);
+                    token_pkt->pktType = TKN_TYPE;
+                    assert("Token OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[pkt->src_node], token_pkt) != -1);
+                    // pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter++);
+                }
             }
             else // No mem, send net if any.
             {
@@ -585,7 +610,7 @@ void work_per_timeslot()
                                 total_pkts_rcvd--;
                                 if (flow->flowType == WREQ_TYPE) // if it is a WREQ and not yet granted
                                 {
-                                    printf("WREQ granted! curr: %d\n", curr_timeslot);
+                                    // printf("WREQ granted! curr: %d\n", curr_timeslot);
                                     flow->grantState = GRANTED_STATE; // WREQ Granted
                                     if (flow->grantTime < 0)
                                     {
@@ -603,9 +628,9 @@ void work_per_timeslot()
                                         rresp_flow->flowType = RRESP_TYPE;
                                         rresp_flow->grantState = GRANTED_STATE; // initial as granted
                                         rresp_flow->quota = pkt->reqLen;
-                                        rresp_flow->expected_runtime = rresp_flow->flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots;
+                                        rresp_flow->expected_runtime = rresp_flow->flow_size_bytes / BLK_SIZE + 3 + 4 * per_hop_propagation_delay_in_timeslots; // Extra 3block of RREQ and its propagation delay
                                         flow->grantTime = curr_timeslot;
-                                        rresp_flow->notifTime = flow->notifTime; // For stat purpose, the FCT of RRESP should be sum of its RREQ and itself.
+                                        rresp_flow->notifTime = flow->timeslot; // For stat purpose, the FCT of RRESP should be sum of its RREQ and itself.
                                         rresp_flow->grantTime = curr_timeslot;
                                         assert("Too many flows!" && flowlist->num_flows - 1 < MAX_FLOW_ID);
                                         add_flow(flowlist, rresp_flow);
@@ -618,6 +643,10 @@ void work_per_timeslot()
                                         rresp_flow->quota = pkt->reqLen;
                                     }
                                 }
+                            }
+                            else if (pkt->pktType == TKN_TYPE) // Flip tokenARR
+                            {
+                                node->tokenArr[pkt->src_node] = 1;
                             }
                             else // Normal Mem traffic
                             {
