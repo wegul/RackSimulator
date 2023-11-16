@@ -11,18 +11,25 @@ tor_t create_tor(int16_t tor_index)
     {
         self->upstream_pkt_buffer[i] = create_buffer(TOR_UPSTREAM_BUFFER_LEN);      // recved from host
         self->downstream_send_buffer[i] = create_buffer(TOR_DOWNSTREAM_BUFFER_LEN); // pkts that will be sent to host
-
         self->upstream_mem_buffer[i] = create_buffer(TOR_DOWNSTREAM_MEMBUF_LEN);
         self->downstream_mem_buffer[i] = create_buffer(TOR_UPSTREAM_MEMBUF_LEN);
         self->downstream_mem_buffer_lock[i] = -1;
     }
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
-        self->notif_queue[i] = malloc(sizeof(notif_t));
+        self->notif_queue[i] = malloc(sizeof(struct notification));
+    }
+    for (int i = 0; i < NODES_PER_RACK; i++)
+    {
+        for (int j = 0; j < NODES_PER_RACK; j++)
+        {
+            self->tokenArr[i][j] = 0;
+        }
     }
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
         self->notif_queue[i]->reqFlowID = -1;
+        self->notif_queue[i]->curQuota = 0;
         self->notif_queue[i]->remainingReqLen = -1;
         self->notif_queue[i]->sender = -1;
         self->notif_queue[i]->receiver = -1;
@@ -46,4 +53,27 @@ void free_tor(tor_t self)
         }
         free(self);
     }
+}
+notif_t copy_notif(notif_t src)
+{
+    if (src == NULL)
+    {
+        // Source is NULL, return NULL to indicate no data to copy
+        return NULL;
+    }
+    notif_t dest = malloc(sizeof(struct notification));
+    if (dest == NULL)
+    {
+        // Memory allocation failed
+        return NULL;
+    }
+    // Copying data from source to destination
+    dest->remainingReqLen = src->remainingReqLen;
+    dest->curQuota = src->curQuota;
+    dest->reqFlowID = src->reqFlowID;
+    dest->isGranted = src->isGranted;
+    dest->sender = src->sender;
+    dest->receiver = src->receiver;
+
+    return dest;
 }

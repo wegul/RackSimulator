@@ -18,9 +18,12 @@ struct notification
     int receiver;
 };
 typedef struct notification *notif_t;
+notif_t copy_notif(notif_t src);
+
 struct tor
 {
     int16_t tor_index;
+    int ntf_cnt;
     rnode_t routing_table[RTABLE_SIZE];
     // mem buffer
     buffer_t *upstream_mem_buffer[NODES_PER_RACK];
@@ -31,7 +34,7 @@ struct tor
     buffer_t *downstream_send_buffer[NODES_PER_RACK];
     notif_t notif_queue[MAX_FLOW_ID];
     int downstream_mem_buffer_lock[NODES_PER_RACK];
-    int ntf_cnt;
+    int tokenArr[NODES_PER_RACK][NODES_PER_RACK];
 };
 typedef struct tor *tor_t;
 

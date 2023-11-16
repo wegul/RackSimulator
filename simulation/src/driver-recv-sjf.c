@@ -15,6 +15,7 @@ volatile int64_t curr_timeslot = 0; // extern var
 int packet_counter = 0;
 
 int burst_size = 175; // = 1500Byte Number of blocks to send in a burst
+double load = 1.0;    // Network load
 
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
@@ -29,6 +30,7 @@ static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; // extern var
 int CHUNK_SIZE = 256;
+int UTHRES = 1;
 volatile int64_t total_flows_started = 0; // extern var
 
 volatile int64_t max_bytes_rcvd = 1000000;
@@ -96,6 +98,7 @@ void work_per_timeslot()
         tor_t tor = tors[0];
         int16_t tor_index = 0;
         //================Shortest req first================
+
         // Generate LEGAL_ARR
         int legal_arr[NODES_PER_RACK];
         for (int sender = 0; sender < NODES_PER_RACK; sender++)
@@ -110,80 +113,66 @@ void work_per_timeslot()
                 }
             }
         }
-        /*
-        Sort NotifArr, give grant from the head. Whenever available, give it, and dont forget to mark legalArr.
-        */
-        qsort(tor->notif_queue, MAX_FLOW_ID, sizeof(notif_t), cmp_ntf);
-        // From head to tail, assign grant to each notif.
-        for (int i = 0; i < MAX_FLOW_ID; i++)
+        for (int recver = 0; recver < NODES_PER_RACK; recver++)
         {
-            notif_t ntf = tor->notif_queue[i];
-            // Check Ntf and sender validity. Make sure the notif needs something and the sender is ready to send.
-            if (!ntf->isGranted && legal_arr[ntf->sender] && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
+            // Check the port is available
+            if (tor->downstream_mem_buffer_lock[recver] < 0 && tor->downstream_mem_buffer[recver]->num_elements < QTHRES) // Rate-limiting GRANT
             {
-                // The receiver is ready to receive
-                if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
+                // Choose the smallest notification among all legal notifs
+                int minval = INT32_MAX - 1, minidx = -1;
+                for (int i = 0; i < MAX_FLOW_ID; i++)
                 {
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                    legal_arr[ntf->sender] = 0;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
-                    grant->pktType = GRT_TYPE;
-                    grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
-                    ntf->curQuota = grant->reqLen;
-                    ntf->remainingReqLen -= ntf->curQuota;
-                    printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    notif_t ntf = tor->notif_queue[i];
+                    // 1. Check the notif is valid (whether it needs a grant)
+                    if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0 && ntf->receiver == recver)
+                    {
+                        // 2.Check if this SENDER is legal.
+                        if (legal_arr[ntf->sender] == 0) // Not legal
+                        {
+                            // 3a. Check if it exceeds the 'urgency threshold'
+                            if (ntf->remainingReqLen < UTHRES)
+                            {
+                                // max_uval = ntf->remainingReqLen;
+                                minidx = i;
+                                break;
+                            }
+                        }
+                        else // it it legal
+                        {
+                            // 3b. Choose smallest
+                            if (legal_arr[ntf->sender] == 1 && ntf->remainingReqLen < minval)
+                            {
+                                minval = ntf->remainingReqLen;
+                                minidx = i;
+                            }
+                        }
+                    }
+                }
+                // Grant the shortest
+                if (minidx >= 0)
+                {
+                    notif_t ntf = tor->notif_queue[minidx];
+                    if (tor->downstream_mem_buffer[ntf->sender]->num_elements < QTHRES) // Rate limiting grant
+                    {
+                        ntf->isGranted = 1;
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        legal_arr[ntf->sender] = 0;
+                        /*The problem is, when to give permission of outcasting.
+                        val is calculated by total_flow_size / wait-time.
+                        if multiple val is presented, give them all.
+                        */
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, minidx, BLK_SIZE, -1, packet_counter++);
+                        grant->pktType = GRT_TYPE;
+                        grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
+                        ntf->curQuota = grant->reqLen;
+                        ntf->remainingReqLen -= ntf->curQuota;
+                        printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, minidx, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
-        //================================================================
-        // for (int recver = 0; recver < NODES_PER_RACK; recver++)
-        // {
-        //     // Check the port is available
-        //     if (tor->downstream_mem_buffer_lock[recver] < 0 && tor->downstream_mem_buffer[recver]->num_elements < QTHRES) // Rate-limiting GRANT
-        //     {
-        //         // Choose the smallest notification among all legal notifs
-        //         int minval = INT32_MAX - 1, minidx = -1;
-        //         for (int i = 0; i < MAX_FLOW_ID; i++)
-        //         {
-        //             notif_t ntf = tor->notif_queue[i];
-        //             // 1. Check the notif is valid (whether it needs a grant)
-        //             if (legal_arr[ntf->sender] == 1 && ntf->remainingReqLen < minval &&
-        //                 !ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0 && ntf->receiver == recver)
-        //             {
-        //                 // 2.Check if this SENDER is legal.
-        //                 // 3b. Choose smallest
-        //                 minval = ntf->remainingReqLen;
-        //                 minidx = i;
-        //             }
-        //         }
-        //         // Grant the shortest
-        //         if (minidx >= 0)
-        //         {
-        //             notif_t ntf = tor->notif_queue[minidx];
-        //             if (tor->downstream_mem_buffer[ntf->sender]->num_elements < QTHRES) // Rate limiting grant
-        //             {
-        //                 ntf->isGranted = 1;
-        //                 tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-        //                 legal_arr[ntf->sender] = 0;
-        //                 /*The problem is, when to give permission of outcasting.
-        //                 val is calculated by total_flow_size / wait-time.
-        //                 if multiple val is presented, give them all.
-        //                 */
-        //                 // Send grant to future msg_sender
-        //                 packet_t grant = create_packet(ntf->receiver, ntf->sender, minidx, BLK_SIZE, -1, packet_counter++);
-        //                 grant->pktType = GRT_TYPE;
-        //                 grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
-        //                 ntf->curQuota = grant->reqLen;
-        //                 ntf->remainingReqLen -= ntf->curQuota;
-        //                 printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, urgentVal: %d,curr: %d\n", ntf->receiver, ntf->sender, minidx, grant->reqLen, ntf->remainingReqLen, ntf->remainingReqLen / (8 * ntf->waitTime), curr_timeslot);
-        //                 assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
-        //             }
-        //         }
-        //     }
-        // }
         //================end================
 
         // Forwarding: extract from ingress port (UPTREAM) to egress port (DOWNSTREAM)
@@ -355,7 +344,7 @@ void work_per_timeslot()
                             {
                                 if (flow->bytes_sent > 0) // Not Header
                                 {
-                                    mem_pkt->pktType = RREQ_TYPE; // If it is not the first one, just send it as regular traffic.
+                                    mem_pkt->pktType = NET_TYPE; // If it is not the first one, just send it as regular traffic.
                                 }
                                 else
                                 {
@@ -389,13 +378,9 @@ void work_per_timeslot()
                             flow->active = 1;
                             flow->timeslots_active++;
                             // Drained this quota, check if need another quota
-                            if (flow->quota < BLK_SIZE && flow->flowType != RREQ_TYPE) // RREQ is an exception because it does not lock up ports.
+                            if (flow->quota < 1 && flow->flowType != RREQ_TYPE) // RREQ is an exception because it does not lock up ports.
                             {
-                                if (tor->downstream_mem_buffer_lock[mem_pkt->dst_node] == mem_pkt->src_node)
-                                {
-                                    tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = -1; // Release buffer lock
-                                }
-
+                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = -1; // Release buffer lock
                                 // printf("flow %d release port %d at %d\n", flow->flow_id, mem_pkt->dst_node, curr_timeslot);
                                 if (flow->flow_size_bytes - flow->bytes_sent > 0) // Need more quota
                                 {
@@ -478,58 +463,39 @@ void work_per_timeslot()
             packet_t pkt = (packet_t)buffer_get(tor->downstream_mem_buffer[tor_port]);
             if (pkt)
             {
-                // printf("tor sent (%d), cnt: %d %d-%d, flowid: %d, buf: %d/%d, curr: %d\n",
-                //        pkt->pktType, pkt->pkt_id, pkt->src_node, pkt->dst_node, pkt->flow_id, tor->downstream_mem_buffer[tor_port]->num_elements, tor->downstream_mem_buffer[tor_port]->size, curr_timeslot);
+                // printf("tor sent (%d), cnt: %d %d-%d, flowid: %d, queueing: %d, buf: %d/%d, curr: %d\n", pkt->isMemPkt, pkt->pkt_id, pkt->src_node, pkt->dst_node, pkt->flow_id, curr_timeslot - pkt->time_to_dequeue_from_link, tor->downstream_mem_buffer[tor_port]->num_elements, tor->downstream_mem_buffer[tor_port]->size, curr_timeslot);
                 pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                 link_enqueue(links->tor_to_host_link[tor_index][tor_port], pkt);
                 if (pkt->pktType == RRESP_TYPE)
                 {
                     int rreq_id = resp2req[pkt->flow_id];
                     assert(rreq_id >= 0);
-                    for (int i = 0; i < MAX_FLOW_ID; i++)
+                    tor->notif_queue[rreq_id]->curQuota -= BLK_SIZE;
+                    if (tor->notif_queue[rreq_id]->curQuota < 1 && tor->notif_queue[rreq_id]->isGranted)
                     {
-                        if (tor->notif_queue[i]->reqFlowID == rreq_id)
-                        {
-                            tor->notif_queue[i]->curQuota -= BLK_SIZE;
-                            if (tor->notif_queue[i]->curQuota < 1 && tor->notif_queue[i]->isGranted)
-                            {
-                                tor->notif_queue[i]->isGranted = 0;
-                            }
-                            break;
-                        }
+                        tor->notif_queue[rreq_id]->isGranted = 0;
                     }
                 }
                 else if (pkt->pktType == WREQ_TYPE)
                 {
-                    for (int i = 0; i < MAX_FLOW_ID; i++)
+                    tor->notif_queue[pkt->flow_id]->curQuota -= BLK_SIZE;
+                    if (tor->notif_queue[pkt->flow_id]->curQuota < 1 && tor->notif_queue[pkt->flow_id]->isGranted)
                     {
-                        if (tor->notif_queue[i]->reqFlowID == pkt->flow_id)
-                        {
-                            tor->notif_queue[i]->curQuota -= BLK_SIZE;
-                            if (tor->notif_queue[i]->curQuota < 1 && tor->notif_queue[i]->isGranted)
-                            {
-                                tor->notif_queue[i]->isGranted = 0;
-                            }
-                            break;
-                        }
+                        tor->notif_queue[pkt->flow_id]->isGranted = 0;
                     }
                 }
                 else if (pkt->pktType == RREQ_TYPE) // Give a Token.
                 {
-                    if (pkt->seq_num == 0) // Only if it is the first, give a token
+                    tor->tokenArr[pkt->dst_node][pkt->src_node] = 1;
+                    if (tor->downstream_mem_buffer[pkt->dst_node]->num_elements < QTHRES) // Rate limiting RREQ and Token
                     {
-                        tor->tokenArr[pkt->dst_node][pkt->src_node] = 1;
-                        if (tor->downstream_mem_buffer[pkt->dst_node]->num_elements < QTHRES) // Rate limiting RREQ and Token
-                        // The dst now has enough space to accept more RREQs
+                        for (int i = 0; i < NODES_PER_RACK; i++)
                         {
-                            for (int i = 0; i < NODES_PER_RACK; i++)
+                            if (tor->tokenArr[pkt->dst_node][i] && tor->downstream_mem_buffer[pkt->src_node]->num_elements < QTHRES) // Has a token in debt and available to eat a RREQ
                             {
-                                if (tor->tokenArr[pkt->dst_node][i] && tor->downstream_mem_buffer[pkt->src_node]->num_elements < QTHRES) // Has a token in debt and available to eat a RREQ
-                                {
-                                    packet_t token_pkt = create_packet(pkt->dst_node, i, pkt->flow_id /*never used*/, 0, -1, packet_counter++);
-                                    token_pkt->pktType = TKN_TYPE;
-                                    assert("Token OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[i], token_pkt) != -1);
-                                }
+                                packet_t token_pkt = create_packet(pkt->dst_node, i, pkt->flow_id /*never used*/, 0, -1, packet_counter++);
+                                token_pkt->pktType = TKN_TYPE;
+                                assert("Token OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[i], token_pkt) != -1);
                             }
                         }
                     }
@@ -570,29 +536,22 @@ void work_per_timeslot()
                         // If it is a RREQ, put a Notif in NotificationQueue, mark UNGRANTED and forward it
                         if (pkt->pktType == RREQ_TYPE)
                         {
-                            if (pkt->seq_num == 0) // Only create a ntf for the first
-                            {
-                                int idx = tor->ntf_cnt;
-                                tor->notif_queue[idx]->remainingReqLen = pkt->reqLen;
-                                tor->notif_queue[idx]->reqFlowID = pkt->flow_id;
-                                // For RREQ Notification, RRESP's sender is DST_NODE
-                                tor->notif_queue[idx]->sender = pkt->dst_node;
-                                tor->notif_queue[idx]->receiver = pkt->src_node;
-                                tor->ntf_cnt++;
-                            }
+                            tor->notif_queue[pkt->flow_id]->remainingReqLen = pkt->reqLen;
+                            tor->notif_queue[pkt->flow_id]->reqFlowID = pkt->flow_id;
+                            // For RREQ Notification, RRESP's sender is DST_NODE
+                            tor->notif_queue[pkt->flow_id]->sender = pkt->dst_node;
+                            tor->notif_queue[pkt->flow_id]->receiver = pkt->src_node;
                             // Directly fwd RREQ
                             assert("TOR RREQ RECV OVERFLOW" && pkt_recv(tor->upstream_mem_buffer[tor_port], pkt) != -1);
                         }
                         // If it is a notification, put a Notif in NotificationQueue, mark UNGRANTED
                         else if (pkt->pktType == NTF_TYPE)
                         {
-                            int idx = tor->ntf_cnt;
-                            tor->notif_queue[idx]->remainingReqLen = pkt->reqLen;
-                            tor->notif_queue[idx]->reqFlowID = pkt->flow_id;
+                            tor->notif_queue[pkt->flow_id]->remainingReqLen = pkt->reqLen;
+                            tor->notif_queue[pkt->flow_id]->reqFlowID = pkt->flow_id;
                             // printf("Flow %d ask for WREQ to %d, curr: %d\n", pkt->flow_id, pkt->dst_node, curr_timeslot);
-                            tor->notif_queue[idx]->sender = pkt->src_node;
-                            tor->notif_queue[idx]->receiver = pkt->dst_node;
-                            tor->ntf_cnt++;
+                            tor->notif_queue[pkt->flow_id]->sender = pkt->src_node;
+                            tor->notif_queue[pkt->flow_id]->receiver = pkt->dst_node;
                         }
                         else // Could be RRESP, WREQ
                         {
@@ -665,7 +624,7 @@ void work_per_timeslot()
                                 }
                                 else if (flow->flowType == RREQ_TYPE) // Received a Grant of a RREQ, means I need to create a new RRESP flow
                                 {
-                                    if (flow->grantTime < 0) // Check if it is the first time grant
+                                    if (flow->grantTime < 0)
                                     {
                                         int rresp_flow_size = flow->rreq_bytes;
                                         flow_t *rresp_flow = create_flow(flowlist->num_flows, rresp_flow_size, node->node_index /* DST send to Requester*/, flow->src, curr_timeslot + 1);
@@ -877,25 +836,6 @@ int comp(const void *elem1, const void *elem2)
         return -1;
     return 0;
 }
-int cmp_ntf(const void *a, const void *b)
-{
-    notif_t notif1 = *(notif_t *)a;
-    notif_t notif2 = *(notif_t *)b;
-
-    if (notif1->remainingReqLen < notif2->remainingReqLen)
-    {
-        return -1;
-    }
-    else if (notif1->remainingReqLen > notif2->remainingReqLen)
-    {
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
-}
-
 /*
 Example trace:
 FlowID, isMemFlow, memType, src, dst, flow size bytes, rreq_bytes, initialize timeslot
@@ -1105,6 +1045,14 @@ void process_args(int argc, char **argv)
         case 'b':
             link_bandwidth = atof(optarg);
             printf("Running with a link bandwidth of: %fGbps\n", link_bandwidth);
+            break;
+        case 'u':
+            UTHRES = atoi(optarg);
+            printf("Urgent threshold: %d\n", UTHRES);
+            break;
+        case 'l':
+            load = atof(optarg);
+            printf("Using a load of %0.1f\n", load);
             break;
         case 'f':
             if (strlen(optarg) < 500)

@@ -29,8 +29,7 @@ static volatile int8_t terminate4 = 0;
 static volatile int8_t terminate5 = 0;
 
 volatile int64_t num_of_flows_finished = 0; // extern var
-int64_t num_of_flows_to_finish = 1000;      // stop after these many flows finish
-
+int CHUNK_SIZE = 256;
 volatile int64_t total_flows_started = 0; // extern var
 
 volatile int64_t max_bytes_rcvd = 1000000;
@@ -47,6 +46,8 @@ node_t *nodes;
 tor_t *tors;
 links_t links;
 flowlist_t *flowlist;
+int resp2req[MAX_FLOW_ID];
+int req2resp[MAX_FLOW_ID];
 
 void work_per_timeslot()
 {
@@ -69,14 +70,24 @@ void work_per_timeslot()
             {
                 // printf("activate flow: %d, curr: %d\n", flow->flow_id, curr_timeslot);
                 int src = flow->src;
-                if (flow->isMemFlow)
+                buffer_put(nodes[src]->active_flows, flow);
+            }
+        }
+        /*---------------------------------------------------------------------------*/
+        // Bounding concurrent flows
+        /*---------------------------------------------------------------------------*/
+        for (int i = 0; i < NODES_PER_RACK; i++)
+        {
+            node_t node = nodes[i];
+            int flowCnt = 0;
+            for (int j = 0; j < node->active_flows->num_elements; j++)
+            {
+                flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
+                if (flow->flowType != NET_TYPE)
                 {
-                    buffer_put(nodes[src]->active_mem_flows, flow);
+                    flowCnt++;
                 }
-                else
-                {
-                    buffer_put(nodes[src]->active_flows, flow);
-                }
+                assert("More than 200 concurrent flows!" && flowCnt < 200);
             }
         }
 
@@ -85,69 +96,52 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         tor_t tor = tors[0];
         int16_t tor_index = 0;
-        // Peek traverse NotificationQueue and give GRANT
-        for (int i = 0; i < MAX_FLOW_ID; i++)
+        //================Shortest req first================
+        for (int recver = 0; recver < NODES_PER_RACK; recver++)
         {
-            notif_t ntf = tor->notif_queue[i];
-            if (!ntf->isGranted && ntf->req_type >= 0) // Notification Requests for buffer
+            // Check the port is available
+            if (tor->downstream_mem_buffer_lock[recver] < 0 && tor->downstream_mem_buffer[recver]->num_elements < QTHRES) // Rate-limiting GRANT
             {
-                // Check if available: only grant one sender per DOWNSTREAM port
-                if (!tor->downstream_mem_buffer_lock[ntf->receiver])
+                // Choose the smallest notification among all legal notifs
+                int min_reqLen = INT32_MAX - 1, min_idx = -1;
+                for (int i = 0; i < MAX_FLOW_ID; i++)
                 {
-                    // printf("Grant to %d, flow: %d, type: %d, curr: %d\n", ntf->sender, i, ntf->req_type, curr_timeslot);
-                    tor->ntf_cnt--;
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = 1;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, i, BLK_SIZE, -1, packet_counter++);
-                    grant->isMemPkt = 1;
-                    grant->memType = 200;
-                    grant->req_len = ntf->length;
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
-#ifdef RECORD_PACKETS
-                    fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, grant\n", (int)grant->flow_id, (int)grant->src_node, (int)grant->dst_node, (int)grant->dst_node, (int)(curr_timeslot), (int)grant->time_when_transmitted_from_src);
-#endif
+                    notif_t ntf = tor->notif_queue[i];
+                    // 1.Check if this SENDER is legal.
+                    if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0 && ntf->receiver == recver)
+                    {
+                        // 2. Choose smallest
+                        if (ntf->remainingReqLen < min_reqLen)
+                        {
+                            min_reqLen = ntf->remainingReqLen;
+                            min_idx = i;
+                        }
+                    }
+                }
+                // Grant the shortest
+                if (min_idx >= 0)
+                {
+                    notif_t ntf = tor->notif_queue[min_idx];
+                    if (tor->downstream_mem_buffer[ntf->sender]->num_elements < QTHRES) // Rate limiting grant
+                    {
+                        ntf->isGranted = 1;
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, min_idx, BLK_SIZE, -1, packet_counter++);
+                        grant->pktType = GRT_TYPE;
+                        grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
+                        ntf->curQuota = grant->reqLen;
+                        ntf->remainingReqLen -= ntf->curQuota;
+                        // if (ntf->receiver == 60 || ntf->sender == 62)
+                        // {
+                        printf("Grant %d to %d, flow: %d, quota: %d, remain: %d,curr: %d\n", ntf->receiver, ntf->sender, min_idx, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
+                        // }
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
-
-        // //================Shortest msg first================
-        // for (int recver = 0; recver < NODES_PER_RACK; recver++)
-        // {
-        //     if (!tor->downstream_mem_buffer_lock[recver])
-        //     {
-        //         // Send the smallest notification
-        //         int min_reqLen = INT32_MAX - 1, min_idx = -1;
-        //         for (int i = 0; i < MAX_FLOW_ID; i++)
-        //         {
-        //             notif_t ntf = tor->notif_queue[i];
-        //             if (!ntf->isGranted && ntf->req_type >= 0 && ntf->receiver == recver)
-        //             {
-        //                 if (ntf->length < min_reqLen)
-        //                 {
-        //                     min_reqLen = ntf->length;
-        //                     min_idx = i;
-        //                 }
-        //             }
-        //         }
-        //         // Grant the shortest
-        //         if (min_idx >= 0)
-        //         {
-        //             notif_t ntf = tor->notif_queue[min_idx];
-        //             // printf("Grant to %d, curr: %d\n", ntf->sender, curr_timeslot);
-        //             tor->ntf_cnt--;
-        //             ntf->isGranted = 1;
-        //             tor->downstream_mem_buffer_lock[recver] = 1;
-        //             // Send grant to future msg_sender
-        //             packet_t grant = create_packet(ntf->receiver, ntf->sender, min_idx, BLK_SIZE, -1, packet_counter++);
-        //             grant->isMemPkt = 1;
-        //             grant->memType = 200;
-        //             grant->req_len = ntf->length;
-        //             assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
-        //         }
-        //     }
-        // }
-        // //================end================
+        //================end================
 
         // Forwarding: extract from ingress port (UPTREAM) to egress port (DOWNSTREAM)
         for (int j = 0; j < NODES_PER_RACK; j++)
@@ -157,8 +151,11 @@ void work_per_timeslot()
             while (mem_pkt)
             {
                 int dst_host = mem_pkt->dst_node;
+                if (tor->downstream_mem_buffer[dst_host]->num_elements > TOR_DOWNSTREAM_MEMBUF_LEN - 8)
+                {
+                    printf("tor recv (%d), cnt: %d %d-%d, flowid: %d, curr: %d\n", mem_pkt->pktType, mem_pkt->pkt_id, mem_pkt->src_node, mem_pkt->dst_node, mem_pkt->flow_id, curr_timeslot);
+                }
                 assert("TOR PROC OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[dst_host], mem_pkt) != -1);
-                // printf("tor recv (%d), cnt: %d %d-%d, flowid: %d, curr: %d\n", mem_pkt->isMemPkt, mem_pkt->pkt_id, mem_pkt->src_node, mem_pkt->dst_node, mem_pkt->flow_id, curr_timeslot);
 #ifdef RECORD_PACKETS
                 fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, mem\n", (int)mem_pkt->flow_id, (int)mem_pkt->src_node, (int)mem_pkt->dst_node, (int)mem_pkt->dst_node, (int)(curr_timeslot), (int)mem_pkt->time_when_transmitted_from_src);
 #endif
@@ -178,7 +175,7 @@ void work_per_timeslot()
                 int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
                 if (dropped < 0)
                 {
-// printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+                    printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
 #ifdef RECORD_PACKETS
                     fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, net, dropped\n", (int)net_pkt->flow_id, (int)net_pkt->src_node, (int)net_pkt->dst_node, (int)net_pkt->dst_node, (int)(curr_timeslot), (int)net_pkt->time_when_transmitted_from_src);
 #endif
@@ -220,202 +217,156 @@ void work_per_timeslot()
         {
             node_t node = nodes[i];
             int16_t node_index = node->node_index;
-            flow_t *flow = NULL;
-            int highestP_val = -1, highestP_idx = -1; // The highest priority value and position in Active_mem_queue
-            // Check if host has any Mem.
-            for (int j = 0; j < (node->active_mem_flows)->num_elements; j++)
+            int minval = INT32_MAX - 1, minidx = -1;
+            // Traverse to get candidate
+            for (int j = 0; j < node->active_flows->num_elements; j++)
             {
-                flow_t *peek_flow = (flow_t *)buffer_peek(node->active_mem_flows, j);
+                flow_t *peek_flow = (flow_t *)buffer_peek(node->active_flows, j);
                 if (peek_flow)
                 {
-                    if (highestP_val != peek_flow->memType)
+                    int val = calculate_priority(peek_flow);
+                    if (val < minval && val > 0) // val <0 means it is WAITING.
                     {
-                        highestP_val = max_priority(peek_flow->memType, highestP_val);
-                        if (highestP_val == peek_flow->memType)
-                        {
-                            highestP_idx = j;
-                        }
+                        minval = val;
+                        minidx = j; // The candidate is now node->activeflows[j];
                     }
                 }
             }
-            // Already have a sending flow
             if (node->current_flow != NULL)
             {
-                int nxtType = max_priority(node->current_flow->memType, highestP_val);
-                // Active_mem has a higher candidate, so Put back current and select new next.
-                if (nxtType != node->current_flow->memType && nxtType != -1)
+                int curval = calculate_priority(node->current_flow);
+                if (curval < 0) //  we should shut curr whenever cur == waiting
                 {
-                    // printf("node %d Put back lowP flow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
-
-                    if (node->current_flow->memType == -1)
-                    {
-                        buffer_put(node->active_flows, node->current_flow);
-                    }
-                    else
-                    {
-                        buffer_put(node->active_mem_flows, node->current_flow);
-                    }
-
-                    node->current_flow = buffer_remove(node->active_mem_flows, highestP_idx);
-                    // printf("node %d preempt old with new: %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
-                }
-                else // The current is higher or equal to candidate, so stick to current except for ungranted WREQ(998)
-                {
-                    if (node->current_flow->memType == 998) // Put back ungranted WREQ no matter what
-                    {
-                        // printf("node %d Put back 998 memflow %d, memType: %d\n", node->node_index, node->current_flow->flow_id, node->current_flow->memType);
-                        buffer_put(node->active_mem_flows, node->current_flow);
-                        node->current_flow = NULL;
-                    }
-                    else
-                    {
-                        // printf("node %d Remain flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
-                    }
+                    buffer_put(node->active_flows, node->current_flow);
+                    node->current_flow = NULL;
                 }
             }
-            else // Current is NULL, check if mem has a candidate, as long as it is not 998 or -1, choose it.
+            if (node->current_flow == NULL) // Current is NULL, choose the candidate
             {
-                if (highestP_val != 998 && highestP_val != -1)
+                if (minidx >= 0)
                 {
-                    node->current_flow = buffer_remove(node->active_mem_flows, highestP_idx);
+                    node->current_flow = buffer_remove(node->active_flows, minidx);
                     // printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
                 }
             }
-
-            // If not selected mem, then check if host has any active net flows at current moment
-            if (node->current_flow == NULL && (node->active_flows)->num_elements > 0)
+            else // Already have a sending flow
             {
-                // Time to select a new burst flow
-                if (curr_timeslot % burst_size == 0 || node->current_flow == NULL)
+                int curval = calculate_priority(node->current_flow);
+                if (minval < curval && minidx >= 0) // Have a higher priority flow
                 {
-                    // Return the current flow back to the active flows list
-                    if (node->current_flow != NULL)
+                    buffer_put(node->active_flows, node->current_flow);
+                    node->current_flow = buffer_remove(node->active_flows, minidx);
+                    // printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
+                }
+                else if (minval == curval && minval == NET_TYPE * NET_STATE) // Two net flow compares. Should check if curr has finished a burst.
+                {
+                    // If burst finished, change to new flow
+                    if (node->current_flow->quota <= 0)
                     {
+                        // printf("burst finished node %d PeekSelect flow %d, sent: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->bytes_sent, curr_timeslot);
+                        // Refill and Return the current flow back to the active flows list
+                        node->current_flow->quota = ETH_MTU;
                         buffer_put(node->active_flows, node->current_flow);
                         node->current_flow = NULL;
+                        node->current_flow = buffer_remove(node->active_flows, minidx);
                     }
-                    // Randomly select a new active flow to start
-                    int32_t num_af = node->active_flows->num_elements;
-                    int32_t selected = 0;
-                    // int32_t selected = (int32_t)rand() % num_af;
-                    node->current_flow = buffer_remove(node->active_flows, selected);
                 }
             }
 
-            flow = node->current_flow;
+            flow_t *flow = node->current_flow;
 
             // Now that flow is selected, start sending packet
             if (flow)
             {
-                // printf("node %d Select flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
-
                 int16_t src_node = flow->src;
                 int16_t dst_node = flow->dst;
                 int64_t flow_id = flow->flow_id;
                 // Mem flow send packet
-                if (flow->isMemFlow)
+                if (flow->flowType != NET_TYPE)
                 {
-                    assert("FLOW->MEMTYPE ERROR" && flow->memType >= 0);
-                    // Notification
-                    // WREQ, if not yet notify
-                    if (flow->memType == 999)
+                    // Notification:
+                    // if not yet notified
+                    if (flow->grantState == NOTIF_STATE && flow->flowType != RREQ_TYPE)
                     {
-                        flow->memType--; // Notified
-                        // printf("Flow %d send WREQ Notif %d to %d, curr: %d\n", flow->flow_id, flow->src, flow->dst, curr_timeslot);
+                        // printf("node %d Select flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->flowType, curr_timeslot);
+                        // WREQ and RRESP send notif while RREQ send itself
+                        flow->grantState = WAITING_STATE; // Notified WREQ or RRESP
+                        flow->notifTime = curr_timeslot;
+                        printf("Flow %d send Notif %d to %d, curr: %d\n", flow->flow_id, flow->src, flow->dst, curr_timeslot);
                         // Push a Notification in link.
                         packet_t ntf_pkt = create_packet(src_node, dst_node, flow_id, BLK_SIZE, -1, packet_counter++);
-                        ntf_pkt->isMemPkt = 1;
-                        ntf_pkt->memType = 0x0c; // Notification for WREQ
-                        ntf_pkt->req_len = flow->flow_size_bytes;
+                        ntf_pkt->pktType = NTF_TYPE;
                         ntf_pkt->time_when_transmitted_from_src = curr_timeslot;
                         ntf_pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
+                        ntf_pkt->reqLen = flow->flow_size_bytes; // Notify ToR total bytes. TOR will automatically grant with quota.
                         link_enqueue(links->host_to_tor_link[node_index][0], ntf_pkt);
                     }
-                    else if (flow->memType < 3) // It is RREQ, granted RRESP or granted WREQ, so put packet in link and update flow status
+                    else if (flow->grantState != WAITING_STATE) // Could only be GRANTED or RREQ, so put packet in link and update flow status
                     {
-                        int64_t flow_bytes_remaining = flow->flow_size_bytes - node->seq_num[flow->flow_id];
-                        if (flow->flow_size_bytes - flow->bytes_received < 1)
+                        // printf("node %d Select flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->flowType, curr_timeslot);
+                        if (flow->quota > 0)
                         {
-                            node->current_flow = NULL;
-                            continue;
-                        }
-                        if (flow_bytes_remaining > 0)
-                        {
-                            int64_t size = BLK_SIZE;
-                            packet_t mem_pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter++);
-                            node->seq_num[flow_id] += size;
-                            mem_pkt->isMemPkt = 1;
-                            if (flow->memType == 0) // RREQ, check if it is header (first).
+                            packet_t mem_pkt = create_packet(src_node, dst_node, flow_id, BLK_SIZE, node->seq_num[flow_id], packet_counter++);
+                            node->seq_num[flow_id] += BLK_SIZE;
+                            if (flow->flowType == RREQ_TYPE) // RREQ, check if it is header (first). The first RREQ should tell the total num of flow_size. The receiver will chunk it.
                             {
                                 if (flow->bytes_sent > 0) // Not Header
                                 {
-                                    mem_pkt->memType = 0x1a;
+                                    mem_pkt->pktType = NET_TYPE; // If it is not the first one, just send it as regular traffic.
                                 }
                                 else
                                 {
-                                    mem_pkt->memType = 0x0a; // RREQ header
-                                    mem_pkt->req_len = flow->rreq_bytes;
+                                    node->tokenArr[flow->dst] = 0; // Consume one token.
+                                    printf("Flow %d send RREQ Notif %d to %d, curr: %d\n", flow->flow_id, flow->src, flow->dst, curr_timeslot);
+                                    mem_pkt->pktType = RREQ_TYPE; // RREQ header
+                                    mem_pkt->reqLen = flow->rreq_bytes;
+                                    flow->notifTime = curr_timeslot;
                                 }
                             }
-                            else if (flow->memType == 1) // RRESP
+                            else
                             {
-                                if (flow_bytes_remaining <= BLK_SIZE) // The last block
-                                {
-                                    mem_pkt->memType = 0x2b;
-                                }
-                                else
-                                    mem_pkt->memType = 0x1b;
+                                mem_pkt->pktType = flow->flowType;
                             }
-                            else if (flow->memType == 2) // WREQ
-                            {
-                                if (flow_bytes_remaining <= BLK_SIZE) // The last block
-                                {
-                                    mem_pkt->memType = 0x2c;
-                                }
-                                else
-                                {
-                                    mem_pkt->memType = 0x1c;
-                                }
-                            }
-                            assert("mem_pkt memtype error" && mem_pkt->memType >= 0);
                             // Send packet
                             mem_pkt->time_when_transmitted_from_src = curr_timeslot;
                             mem_pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                             link_enqueue(links->host_to_tor_link[node_index][0], mem_pkt);
 
                             flow->pkts_sent++;
-                            flow->bytes_sent += size;
+                            flow->bytes_sent += BLK_SIZE;
+                            flow->quota -= BLK_SIZE;
                             // Update flow state
                             if (flow->active == 0)
                             {
-                                // printf("Flow %d started with delay %d\n", flow->flow_id, curr_timeslot - flow->timeslot);
+                                printf("Flow %d started at %d with delay %d\n", flow->flow_id, curr_timeslot, curr_timeslot - flow->timeslot);
                                 flowlist->active_flows++;
                                 flow->start_timeslot = curr_timeslot;
                                 total_flows_started++;
                             }
                             flow->active = 1;
                             flow->timeslots_active++;
-
-                            if (mem_pkt->memType == 0x2b || mem_pkt->memType == 0x2c)
+                            // Drained this quota, check if need another quota
+                            if (flow->quota < 1 && flow->flowType != RREQ_TYPE) // RREQ is an exception because it does not lock up ports.
                             {
-                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = 0;
+                                tor->downstream_mem_buffer_lock[mem_pkt->dst_node] = -1; // Release buffer lock
+                                // printf("flow %d release port %d at %d\n", flow->flow_id, mem_pkt->dst_node, curr_timeslot);
+                                if (flow->flow_size_bytes - flow->bytes_sent > 0) // Need more quota
+                                {
+                                    flow->grantState = WAITING_STATE; // Go back to WAITING because no explicit notif needed, TOR grants automatically.
+                                    buffer_put(node->active_flows, node->current_flow);
+                                    node->current_flow = NULL;
+                                }
                             }
                             if (flow->flow_size_bytes - flow->bytes_sent < 1) // Finished sending...
                             {
                                 node->current_flow = NULL;
                             }
-
-                            // printf("host %d sent (1,%02x), flowid: %d, cnt: %d, seq:%d, deq: %d\n", node->node_index, mem_pkt->memType, mem_pkt->flow_id, mem_pkt->pkt_id, mem_pkt->seq_num, mem_pkt->time_to_dequeue_from_link);
+                            // printf("host %d sent (%d), flowid: %d, cnt: %d, seq:%d, deq: %d\n", node->node_index, mem_pkt->pktType, mem_pkt->flow_id, mem_pkt->pkt_id, mem_pkt->seq_num, mem_pkt->time_to_dequeue_from_link);
                         }
                     }
                 }
-                else // Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
+                else // NetFlow: Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
                 {
-                    if (flow->flow_size_bytes - flow->bytes_received < 1)
-                    {
-                        node->current_flow = NULL;
-                        continue;
-                    }
                     int64_t size = BLK_SIZE;
                     int64_t flow_bytes_remaining = flow->flow_size_bytes - node->seq_num[flow->flow_id];
                     int64_t flow_bytes_unacked = node->seq_num[flow->flow_id] - node->last_acked[flow->flow_id];
@@ -442,25 +393,29 @@ void work_per_timeslot()
                         // Update flow state
                         if (flow->active == 0)
                         {
-                            // printf("Flow %d started with delay %d\n", flow->flow_id, curr_timeslot - flow->timeslot);
+                            printf("Flow %d started with delay %d\n", flow->flow_id, curr_timeslot - flow->timeslot);
                             flowlist->active_flows++;
                             flow->start_timeslot = curr_timeslot;
                             total_flows_started++;
                         }
                         flow->active = 1;
                         flow->bytes_sent += size;
+                        flow->quota -= size;
                         flow->pkts_sent++;
                         flow->timeslots_active++;
                         // Set current flow back to null if there are no more bytes left to send from this flow
+                        if (flow->finished)
+                        {
+                            node->current_flow = NULL;
+                        }
                     }
-
                     // Send packet
                     if (pkt)
                     {
                         pkt->time_when_transmitted_from_src = curr_timeslot;
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_sw_delay_in_timeslots + per_hop_propagation_delay_in_timeslots;
                         link_enqueue(links->host_to_tor_link[node_index][0], pkt);
-                        // printf("host sent (0), cnt: %d, seq: %d, deq: %d\n", pkt->pkt_id, pkt->seq_num, pkt->time_to_dequeue_from_link);
+                        // printf("host sent (%d), seq: %d, deq: %d\n", pkt->pktType, pkt->seq_num, pkt->time_to_dequeue_from_link);
                     }
                 }
             }
@@ -479,6 +434,41 @@ void work_per_timeslot()
                 // printf("tor sent (%d), cnt: %d %d-%d, flowid: %d, queueing: %d, buf: %d/%d, curr: %d\n", pkt->isMemPkt, pkt->pkt_id, pkt->src_node, pkt->dst_node, pkt->flow_id, curr_timeslot - pkt->time_to_dequeue_from_link, tor->downstream_mem_buffer[tor_port]->num_elements, tor->downstream_mem_buffer[tor_port]->size, curr_timeslot);
                 pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                 link_enqueue(links->tor_to_host_link[tor_index][tor_port], pkt);
+                if (pkt->pktType == RRESP_TYPE)
+                {
+                    int rreq_id = resp2req[pkt->flow_id];
+                    assert(rreq_id >= 0);
+                    tor->notif_queue[rreq_id]->curQuota -= BLK_SIZE;
+                    if (tor->notif_queue[rreq_id]->curQuota < 1 && tor->notif_queue[rreq_id]->isGranted)
+                    {
+                        tor->notif_queue[rreq_id]->isGranted = 0;
+                    }
+                }
+                else if (pkt->pktType == WREQ_TYPE)
+                {
+                    tor->notif_queue[pkt->flow_id]->curQuota -= BLK_SIZE;
+                    if (tor->notif_queue[pkt->flow_id]->curQuota < 1 && tor->notif_queue[pkt->flow_id]->isGranted)
+                    {
+                        tor->notif_queue[pkt->flow_id]->isGranted = 0;
+                    }
+                }
+                else if (pkt->pktType == RREQ_TYPE) // Give a Token.
+                {
+                    tor->tokenArr[pkt->dst_node][pkt->src_node] = 1;
+                    if (tor->downstream_mem_buffer[pkt->dst_node]->num_elements < QTHRES) // Rate limiting RREQ and Token
+                    {
+                        for (int i = 0; i < NODES_PER_RACK; i++)
+                        {
+                            if (tor->tokenArr[pkt->dst_node][i] && tor->downstream_mem_buffer[pkt->src_node]->num_elements < QTHRES) // Has a token in debt and available to eat a RREQ
+                            {
+                                packet_t token_pkt = create_packet(pkt->dst_node, i, pkt->flow_id /*never used*/, 0, -1, packet_counter++);
+                                token_pkt->pktType = TKN_TYPE;
+                                assert("Token OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[i], token_pkt) != -1);
+                            }
+                        }
+                    }
+                }
+                // It could be NET_TYPE for the last two blocks of RREQ... Just ignore them...
             }
             else // No mem, send net if any.
             {
@@ -509,36 +499,36 @@ void work_per_timeslot()
                 if (peek_pkt != NULL && peek_pkt->time_to_dequeue_from_link <= curr_timeslot)
                 {
                     pkt = link_get(links->host_to_tor_link[src_host][tor_index], i);
-                    if (pkt->isMemPkt)
+                    if (pkt->pktType != NET_TYPE)
                     {
-                        assert("PKT->MEMTYPE ERROR" && pkt->memType > 0);
-                        // If it is a notification or the header of RREQ, put a Notif in NotificationQueue, mark UNGRANTED
-                        if (pkt->memType < 0x0f) // Could be 0a, 0c
+                        // If it is a RREQ, put a Notif in NotificationQueue, mark UNGRANTED and forward it
+                        if (pkt->pktType == RREQ_TYPE)
                         {
                             tor->ntf_cnt++;
-                            tor->notif_queue[pkt->flow_id]->req_type = pkt->memType;
-                            tor->notif_queue[pkt->flow_id]->length = pkt->req_len;
-                            tor->notif_queue[pkt->flow_id]->isGranted = 0;
-                            if (pkt->memType == 0x0a) // For RREQ Notification, RRESP's sender is DST_NODE
-                            {
-                                tor->notif_queue[pkt->flow_id]->sender = pkt->dst_node;
-                                tor->notif_queue[pkt->flow_id]->receiver = pkt->src_node;
-                                // Directly fwd RREQ
-                                assert("TOR RREQ RECV OVERFLOW" && pkt_recv(tor->upstream_mem_buffer[tor_port], pkt) != -1);
-                            }
-                            else
-                            {
-                                // printf("Flow %d ask for WREQ to %d, curr: %d\n", pkt->flow_id, pkt->dst_node, curr_timeslot);
-                                tor->notif_queue[pkt->flow_id]->sender = pkt->src_node;
-                                tor->notif_queue[pkt->flow_id]->receiver = pkt->dst_node;
-                            }
+                            tor->notif_queue[pkt->flow_id]->remainingReqLen = pkt->reqLen;
+                            tor->notif_queue[pkt->flow_id]->reqFlowID = pkt->flow_id;
+                            // For RREQ Notification, RRESP's sender is DST_NODE
+                            tor->notif_queue[pkt->flow_id]->sender = pkt->dst_node;
+                            tor->notif_queue[pkt->flow_id]->receiver = pkt->src_node;
+                            // Directly fwd RREQ
+                            assert("TOR RREQ RECV OVERFLOW" && pkt_recv(tor->upstream_mem_buffer[tor_port], pkt) != -1);
                         }
-                        else // Could be 1a or 1b or 1c or 2b or 2c
+                        // If it is a notification, put a Notif in NotificationQueue, mark UNGRANTED
+                        else if (pkt->pktType == NTF_TYPE)
+                        {
+                            tor->ntf_cnt++;
+                            tor->notif_queue[pkt->flow_id]->remainingReqLen = pkt->reqLen;
+                            tor->notif_queue[pkt->flow_id]->reqFlowID = pkt->flow_id;
+                            // printf("Flow %d ask for WREQ to %d, curr: %d\n", pkt->flow_id, pkt->dst_node, curr_timeslot);
+                            tor->notif_queue[pkt->flow_id]->sender = pkt->src_node;
+                            tor->notif_queue[pkt->flow_id]->receiver = pkt->dst_node;
+                        }
+                        else // Could be RRESP, WREQ
                         {
                             assert("TOR RECV OVERFLOW" && pkt_recv(tor->upstream_mem_buffer[tor_port], pkt) != -1);
                         }
                     }
-                    else
+                    else // NET
                     {
                         int8_t drop = pkt_recv(tor->upstream_pkt_buffer[tor_port], pkt);
                         if (drop < 0)
@@ -576,40 +566,64 @@ void work_per_timeslot()
                     // Check SEQ state, accept only if no BLOCK drop: If received bytes is less than seq, suggesting pkt loss, then reject the whole packet, i.e., return to last_ack
                     if (flow->bytes_received + pkt->size < pkt->seq_num)
                     {
-                        // printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
+                        printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
+                        // assert(flow->bytes_received + pkt->size >= pkt->seq_num);
                         flow->bytes_received = nodes[flow->src]->last_acked[flow->flow_id];
                     }
                     else
                     {
-                        if (pkt->isMemPkt)
+                        if (pkt->pktType != NET_TYPE)
                         {
                             // The Sender received Grant
-                            if (pkt->memType == 200)
+                            if (pkt->pktType == GRT_TYPE)
                             {
                                 // Counteract the flow updates...
                                 flow->pkts_received--;
                                 flow->bytes_received -= pkt->size;
                                 total_bytes_rcvd -= pkt->size;
                                 total_pkts_rcvd--;
-
-                                // Change timeslot = Re-activate it.
-                                // flow->timeslot = curr_timeslot + 1;
-                                if (flow->memType > 900) // if it is a WREQ and not yet granted
+                                if (flow->flowType == WREQ_TYPE) // if it is a WREQ and not yet granted
                                 {
                                     // printf("WREQ granted! curr: %d\n", curr_timeslot);
-                                    flow->memType = 2; // WREQ Granted
-                                    flow->grantTime = curr_timeslot;
+                                    flow->grantState = GRANTED_STATE; // WREQ Granted
+                                    if (flow->grantTime < 0)
+                                    {
+                                        flow->grantTime = curr_timeslot;
+                                    }
+                                    flow->quota = pkt->reqLen;
                                 }
-                                else if (flow->memType == 0) // Received a Grant of a RREQ, means I need to add a new RRESP flow
+                                else if (flow->flowType == RREQ_TYPE) // Received a Grant of a RREQ, means I need to create a new RRESP flow
                                 {
-                                    flow_t *rresp_flow = create_flow(flowlist->num_flows, pkt->req_len, node->node_index /* DST send to Requester*/, flow->src, curr_timeslot + 1);
-                                    rresp_flow->isMemFlow = 1;
-                                    rresp_flow->memType = 1; // RRESP memType is 1
-                                    rresp_flow->expected_runtime = pkt->req_len / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots;
-                                    rresp_flow->grantTime = curr_timeslot;
-                                    add_flow(flowlist, rresp_flow);
-                                    printf("Created RRESP flow %d, requester: %d responder %d, flow_size %dB ts %d, num of flows: %d\n", flowlist->num_flows - 1, flow->src, flow->dst, pkt->req_len, curr_timeslot + 1, flowlist->num_flows);
+                                    if (flow->grantTime < 0)
+                                    {
+                                        int rresp_flow_size = flow->rreq_bytes;
+                                        flow_t *rresp_flow = create_flow(flowlist->num_flows, rresp_flow_size, node->node_index /* DST send to Requester*/, flow->src, curr_timeslot + 1);
+                                        req2resp[flow->flow_id] = rresp_flow->flow_id;
+                                        resp2req[rresp_flow->flow_id] = flow->flow_id;
+                                        rresp_flow->flowType = RRESP_TYPE;
+                                        rresp_flow->grantState = GRANTED_STATE; // initial as granted
+                                        rresp_flow->quota = pkt->reqLen;
+                                        rresp_flow->expected_runtime = rresp_flow->flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + flow->expected_runtime; // Extra 3block of RREQ and its propagation delay
+                                        flow->grantTime = curr_timeslot;
+                                        rresp_flow->notifTime = flow->timeslot; // For stat purpose, the FCT of RRESP should be sum of its RREQ and itself.
+                                        rresp_flow->grantTime = curr_timeslot;
+                                        assert("Too many flows!" && flowlist->num_flows - 1 < MAX_FLOW_ID);
+                                        add_flow(flowlist, rresp_flow);
+                                        printf("Created RRESP flow %d for RREQ %d, requester: %d responder %d, flow_size %dB ts %d, num of flows: %d\n", rresp_flow->flow_id, flow->flow_id, flow->src, flow->dst, pkt->reqLen, curr_timeslot + 1, flowlist->num_flows);
+                                    }
+                                    else
+                                    {
+                                        assert(req2resp[flow->flow_id] >= 0);
+                                        flow_t *rresp_flow = flowlist->flows[req2resp[flow->flow_id]];
+                                        rresp_flow->grantState = GRANTED_STATE;
+                                        rresp_flow->quota = pkt->reqLen;
+                                    }
                                 }
+                            }
+                            else if (pkt->pktType == TKN_TYPE) // Flip tokenARR
+                            {
+                                node->tokenArr[pkt->src_node] = 1;
+                                continue; // Do not update flow info.
                             }
                             else // Normal Mem traffic
                             {
@@ -621,14 +635,14 @@ void work_per_timeslot()
                         else
                         {
                             // Reply ACK, and write to file as a pkt
-                            if (pkt->seq_num - node->ack_num[pkt->flow_id] > 1500)
+                            if (pkt->seq_num - node->ack_num[pkt->flow_id] > ETH_MTU)
                             {
 #ifdef RECORD_PACKETS
                                 fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, net, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
 #endif
                                 node->ack_num[pkt->flow_id] = pkt->seq_num + pkt->size;
                                 packet_t ack = ack_packet(pkt, node->ack_num[pkt->flow_id]);
-                                ack->isMemPkt = 0;
+                                ack->pktType = NET_TYPE;
                                 // Respond with ACK packet
                                 ack->time_when_transmitted_from_src = curr_timeslot;
                                 ack->time_to_dequeue_from_link = curr_timeslot + per_sw_delay_in_timeslots + per_hop_propagation_delay_in_timeslots;
@@ -759,6 +773,13 @@ void work_per_timeslot()
 
 int main(int argc, char **argv)
 {
+
+    for (int i = 0; i < MAX_FLOW_ID; i++)
+    {
+        resp2req[i] = -1;
+        req2resp[i] = -1;
+    }
+
     srand((unsigned int)time(NULL));
 
     initialize_network();
@@ -805,19 +826,17 @@ void read_tracefile(char *filename)
             exit(1);
         }
         int flow_id = -1;
-        int isMemFlow = -1;
-        int memType = -1;
+        int flowType = -1;
         int rreq_bytes = -1;
         int src = -1;
         int dst = -1;
         int flow_size_bytes = -1;
         int time = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d,%d", &flow_id, &isMemFlow, &memType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 8 && flow_id <= MAX_FLOW_ID / 2)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id <= MAX_FLOW_ID / 2)
         {
             // int timeslot = (int)(time * 1e9 / timeslot_len);
-            int timeslot = (int)time;
-            initialize_flow(flow_id, isMemFlow, memType, src, dst, flow_size_bytes, rreq_bytes, timeslot);
+            initialize_flow(flow_id, flowType, src, dst, flow_size_bytes, rreq_bytes, time);
         }
 
         printf("Flows initialized\n");
@@ -826,26 +845,32 @@ void read_tracefile(char *filename)
     return;
 }
 
-void initialize_flow(int flow_id, int isMemFlow, int memType, int src, int dst, int flow_size_bytes, int rreq_bytes, int timeslot)
+void initialize_flow(int flow_id, int flowType, int src, int dst, int flow_size_bytes, int rreq_bytes, int timeslot)
 {
     if (flow_id < MAX_FLOW_ID)
     {
         flow_t *new_flow = create_flow(flow_id, flow_size_bytes, src, dst, timeslot);
-        new_flow->isMemFlow = isMemFlow;
-        new_flow->memType = memType;
+        new_flow->flowType = flowType;
         new_flow->rreq_bytes = rreq_bytes;
-        if (isMemFlow)
+
+        if (flowType != NET_TYPE) // is a memflow
         {
+            if (flowType == RREQ_TYPE)
+            {
+                new_flow->quota = flow_size_bytes;
+            }
+            new_flow->grantState = NOTIF_STATE;
             new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots;
         }
         else
         {
+            new_flow->quota = ETH_MTU;
+            new_flow->grantState = NET_STATE;
             new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + per_sw_delay_in_timeslots;
         }
-
         add_flow(flowlist, new_flow);
         // #ifdef DEBUG_DRIVER
-        printf("initialized flow %d (%d, %d), src %d dst %d, flow_size %dB (%d) ts %d\n", flow_id, isMemFlow, memType, src, dst, flow_size_bytes, flow_size_bytes / 8, timeslot);
+        // printf("initialized flow %d (%d), src %d dst %d, flow_size %dB (%d) ts %d\n", flow_id, flowType, src, dst, flow_size_bytes, flow_size_bytes / 8, timeslot);
         // #endif
     }
 }
@@ -985,8 +1010,8 @@ void process_args(int argc, char **argv)
         switch (opt)
         {
         case 'n':
-            num_of_flows_to_finish = atoi(optarg);
-            printf("Stop experiment after %ld flows have finished\n", num_of_flows_to_finish);
+            CHUNK_SIZE = atoi(optarg);
+            printf("Chunk Size = %d\n", CHUNK_SIZE);
             break;
         case 'b':
             link_bandwidth = atof(optarg);

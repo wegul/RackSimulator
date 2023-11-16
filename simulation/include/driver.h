@@ -20,12 +20,17 @@
 void read_tracefile(char *filename);
 void initialize_flow(int flow_id, int flowType, int src, int dst, int flow_size_bytes, int rreq_bytes, int timeslot);
 int comp(const void *elem1, const void *elem2);
-int cmp_link(const void *elem1, const void *elem2);
+int cmp_ntf(const void *a, const void *b);
 void open_switch_outfiles(char *base_filename);
 void open_host_outfiles(char *base_filename);
 int calculate_priority(flow_t *flow)
 {
-    if (flow->flowType == RREQ_TYPE) // Check token
+    if (flow->finished)
+    {
+        return -1;
+    }
+
+    if (flow->flowType == RREQ_TYPE && flow->bytes_sent == 0) // Check token
     {
         node_t node = nodes[flow->src];
         if (node->tokenArr[flow->dst] == 0) // No token

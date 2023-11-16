@@ -31,10 +31,13 @@ OBJ = $(OBJDIR)/arraylist.o \
       $(OBJDIR)/timeseries.o \
       $(OBJDIR)/tor.o 
 
-default: all
+default: edm
 
 # list of all the targets to be generated
-all: $(BINDIR)/driver
+edm: $(BINDIR)/driver
+no-match: $(BINDIR)/driver-chunk-nomatching
+no-sjf: $(BINDIR)/driver-chunk-plain
+no-chunk: $(BINDIR)/driver-nochunk-sjf
 
 # % is the wildcard, $< means the first item to the right of :
 $(OBJDIR)/%.o: $(LIBDIR)/%.c $(INCLUDE)
