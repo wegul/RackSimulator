@@ -123,7 +123,7 @@ void work_per_timeslot()
             }
         }
 
-        // //================Shortest msg first================
+        //================Shortest msg first================
         // for (int recver = 0; recver < NODES_PER_RACK; recver++)
         // {
         //     if (!tor->downstream_mem_buffer_lock[recver])
@@ -133,11 +133,11 @@ void work_per_timeslot()
         //         for (int i = 0; i < MAX_FLOW_ID; i++)
         //         {
         //             notif_t ntf = tor->notif_queue[i];
-        //             if (!ntf->isGranted && ntf->req_type >= 0 && ntf->receiver == recver)
+        //             if (!ntf->isGranted && ntf->reqFlowID >= 0 && ntf->receiver == recver)
         //             {
-        //                 if (ntf->length < min_reqLen)
+        //                 if (ntf->reqLen < min_reqLen)
         //                 {
-        //                     min_reqLen = ntf->length;
+        //                     min_reqLen = ntf->reqLen;
         //                     min_idx = i;
         //                 }
         //             }
@@ -152,14 +152,13 @@ void work_per_timeslot()
         //             tor->downstream_mem_buffer_lock[recver] = 1;
         //             // Send grant to future msg_sender
         //             packet_t grant = create_packet(ntf->receiver, ntf->sender, min_idx, BLK_SIZE, -1, packet_counter++);
-        //             grant->isMemPkt = 1;
-        //             grant->memType = 200;
-        //             grant->req_len = ntf->length;
+        //             grant->pktType = GRT_TYPE;
+        //             grant->reqLen = ntf->reqLen;
         //             assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
         //         }
         //     }
         // }
-        // //================end================
+        //================end================
 
         // Forwarding: extract from ingress port (UPTREAM) to egress port (DOWNSTREAM)
         for (int j = 0; j < NODES_PER_RACK; j++)
