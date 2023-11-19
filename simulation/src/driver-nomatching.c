@@ -71,20 +71,20 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         // Bounding concurrent flows (BlockType-mapping)
         /*---------------------------------------------------------------------------*/
-        // for (int i = 0; i < NODES_PER_RACK; i++)
-        // {
-        //     node_t node = nodes[i];
-        //     int flowCnt = 0;
-        //     for (int j = 0; j < node->active_flows->num_elements; j++)
-        //     {
-        //         flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
-        //         if (flow->flowType != NET_TYPE)
-        //         {
-        //             flowCnt++;
-        //         }
-        //         assert("More than 200 concurrent flows!" && flowCnt < 200);
-        //     }
-        // }
+        for (int i = 0; i < NODES_PER_RACK; i++)
+        {
+            node_t node = nodes[i];
+            int flowCnt = 0;
+            for (int j = 0; j < node->active_flows->num_elements; j++)
+            {
+                flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
+                if (flow->flowType != NET_TYPE)
+                {
+                    flowCnt++;
+                }
+                assert("More than 200 concurrent flows!" && flowCnt < 200);
+            }
+        }
 
         /*---------------------------------------------------------------------------*/
         // ToR -- PROCESS
@@ -92,20 +92,6 @@ void work_per_timeslot()
         tor_t tor = tors[0];
         int16_t tor_index = 0;
         //================Shortest req first================
-        // Generate LEGAL_ARR
-        int legal_arr[NODES_PER_RACK];
-        for (int sender = 0; sender < NODES_PER_RACK; sender++)
-        {
-            legal_arr[sender] = 1; // Every sender gets two shots.
-            for (int j = 0; j < NODES_PER_RACK; j++)
-            {
-                if (tor->downstream_mem_buffer_lock[j] == sender)
-                {
-                    legal_arr[sender] = 0;
-                    break;
-                }
-            }
-        }
         /*
         Sort NotifArr, give grant from the head. Whenever available, give it, and dont forget to mark legalArr.
         */
@@ -115,14 +101,13 @@ void work_per_timeslot()
         {
             notif_t ntf = tor->notif_queue[i];
             // Check Ntf and sender validity. Make sure the notif needs something and the sender is ready to send.
-            if (!ntf->isGranted && legal_arr[ntf->sender] && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
+            if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
             {
                 // The receiver is ready to receive
                 if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
                 {
                     ntf->isGranted = 1;
                     tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                    legal_arr[ntf->sender] = 0;
                     // Send grant to future msg_sender
                     packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
                     grant->pktType = GRT_TYPE;
@@ -872,7 +857,7 @@ void read_tracefile(char *filename)
         int flow_size_bytes = -1;
         int time = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id < MAX_FLOW_ID)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id <= MAX_FLOW_ID / 2)
         {
             // int timeslot = (int)(time * 1e9 / timeslot_len);
             initialize_flow(flow_id, flowType, src, dst, flow_size_bytes, rreq_bytes, time);

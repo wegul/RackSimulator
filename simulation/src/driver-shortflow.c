@@ -14,7 +14,7 @@ int per_sw_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; // extern var
 int packet_counter = 0;
 
-int burst_size = 175; // = 1500Byte Number of blocks to send in a burst
+int burst_size = 8; // = 1500Byte Number of blocks to send in a burst
 
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
@@ -71,20 +71,20 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         // Bounding concurrent flows (BlockType-mapping)
         /*---------------------------------------------------------------------------*/
-        // for (int i = 0; i < NODES_PER_RACK; i++)
-        // {
-        //     node_t node = nodes[i];
-        //     int flowCnt = 0;
-        //     for (int j = 0; j < node->active_flows->num_elements; j++)
-        //     {
-        //         flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
-        //         if (flow->flowType != NET_TYPE)
-        //         {
-        //             flowCnt++;
-        //         }
-        //         assert("More than 200 concurrent flows!" && flowCnt < 200);
-        //     }
-        // }
+        for (int i = 0; i < NODES_PER_RACK; i++)
+        {
+            node_t node = nodes[i];
+            int flowCnt = 0;
+            for (int j = 0; j < node->active_flows->num_elements; j++)
+            {
+                flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
+                if (flow->flowType != NET_TYPE)
+                {
+                    flowCnt++;
+                }
+                assert("More than 200 concurrent flows!" && flowCnt < 200);
+            }
+        }
 
         /*---------------------------------------------------------------------------*/
         // ToR -- PROCESS
@@ -115,22 +115,25 @@ void work_per_timeslot()
         {
             notif_t ntf = tor->notif_queue[i];
             // Check Ntf and sender validity. Make sure the notif needs something and the sender is ready to send.
-            if (!ntf->isGranted && legal_arr[ntf->sender] && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
+            if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
             {
                 // The receiver is ready to receive
                 if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
                 {
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                    legal_arr[ntf->sender] = 0;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
-                    grant->pktType = GRT_TYPE;
-                    grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
-                    ntf->curQuota = grant->reqLen;
-                    ntf->remainingReqLen -= ntf->curQuota;
-                    printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    if (legal_arr[ntf->sender] == 1 || ntf->remainingReqLen <= 24 * CHUNK_SIZE)
+                    {
+                        ntf->isGranted = 1;
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        legal_arr[ntf->sender] = 0;
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
+                        grant->pktType = GRT_TYPE;
+                        grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
+                        ntf->curQuota = grant->reqLen;
+                        ntf->remainingReqLen -= ntf->curQuota;
+                        printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
@@ -377,8 +380,8 @@ void work_per_timeslot()
                         node->seq_num[flow_id] += size;
                         // Refresh timer
                         node->last_ack_time[flow->flow_id] = curr_timeslot;
-                        // printf("timeout!! flowid:%d , %d->%d, last ack time:%d, last_ack: %d, curr:%d, cwnd: %d\n",
-                        //        flow->flow_id, flow->src, flow->dst, node->last_ack_time[flow->flow_id], node->last_acked[flow->flow_id], curr_timeslot, node->cwnd[flow_id]);
+                        printf("timeout!! flowid:%d , %d->%d, last ack time:%d, last_ack: %d, curr:%d, cwnd: %d\n",
+                               flow->flow_id, flow->src, flow->dst, node->last_ack_time[flow->flow_id], node->last_acked[flow->flow_id], curr_timeslot, node->cwnd[flow_id]);
                     }
                     // If no retrans and there are new packets need to be sent (some packets are not received/acked)
                     else if (flow_bytes_remaining > 0 && cwnd_bytes_remaining > 0)
@@ -411,7 +414,7 @@ void work_per_timeslot()
                         pkt->time_when_transmitted_from_src = curr_timeslot;
                         pkt->time_to_dequeue_from_link = curr_timeslot + per_sw_delay_in_timeslots + per_hop_propagation_delay_in_timeslots;
                         link_enqueue(links->host_to_tor_link[node_index][0], pkt);
-                        // printf("host sent (%d), seq: %d, deq: %d\n", pkt->pktType, pkt->seq_num, pkt->time_to_dequeue_from_link);
+                        // printf("host %d sent (%d), seq: %d, ack: %d, deq: %d\n", node->node_index, pkt->pktType, pkt->seq_num, pkt->ack_num, pkt->time_to_dequeue_from_link);
                     }
                 }
             }
@@ -490,7 +493,7 @@ void work_per_timeslot()
                 pkt = (packet_t)buffer_get(tor->downstream_send_buffer[tor_port]);
                 if (pkt)
                 {
-                    // printf("tor sent (%d), cnt: %d %d-%d, seq: %d, queueing: %d, buf: %d/%d, curr: %d\n", pkt->isMemPkt, pkt->pkt_id, pkt->src_node, pkt->dst_node, pkt->seq_num, curr_timeslot - pkt->time_to_dequeue_from_link, tor->downstream_send_buffer[tor_port]->num_elements, tor->downstream_send_buffer[tor_port]->size, curr_timeslot);
+                    // printf("tor sent (%d), %d-%d, seq: %d, queueing: %d, buf: %d/%d, curr: %d\n", pkt->pktType, pkt->src_node, pkt->dst_node, pkt->seq_num, curr_timeslot - pkt->time_to_dequeue_from_link, tor->downstream_send_buffer[tor_port]->num_elements, tor->downstream_send_buffer[tor_port]->size, curr_timeslot);
                     pkt->time_to_dequeue_from_link = curr_timeslot + per_hop_propagation_delay_in_timeslots;
                     link_enqueue(links->tor_to_host_link[tor_index][tor_port], pkt);
                 }
@@ -577,9 +580,10 @@ void work_per_timeslot()
                 pkt = link_get(links->tor_to_host_link[0][node_index], 0);
                 assert(pkt->dst_node == node_index);
                 // Data Packet
+                // printf("host recv (%d), cnt: %d, seq:%d, bytes recv: %d, curr: %d\n", pkt->pktType, pkt->pkt_id, pkt->seq_num, flowlist->flows[pkt->flow_id]->bytes_received, curr_timeslot);
+
                 if (pkt->control_flag == 0)
                 {
-                    // printf("host recv (%d, %02x), flow-memType: %d, cnt: %d, seq:%d, bytes recv: %d, curr: %d\n", pkt->isMemPkt, pkt->memType, flowlist->flows[pkt->flow_id]->memType, pkt->pkt_id, pkt->seq_num, flowlist->flows[pkt->flow_id]->bytes_received, curr_timeslot);
                     // Update flow
                     flow_t *flow = flowlist->flows[pkt->flow_id];
                     assert(flow != NULL);
@@ -648,14 +652,14 @@ void work_per_timeslot()
                             else // Normal Mem traffic
                             {
 #ifdef RECORD_PACKETS
-                                fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, mem(%02x), %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->memType, (int)pkt->seq_num);
+                                fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, mem(%02x), %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->pktType, (int)pkt->seq_num);
 #endif
                             }
                         }
                         else
                         {
                             // Reply ACK, and write to file as a pkt
-                            if (pkt->seq_num - node->ack_num[pkt->flow_id] > ETH_MTU)
+                            if (pkt->seq_num - node->ack_num[pkt->flow_id] >= ETH_MTU - BLK_SIZE)
                             {
 #ifdef RECORD_PACKETS
                                 fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, net, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
@@ -872,7 +876,7 @@ void read_tracefile(char *filename)
         int flow_size_bytes = -1;
         int time = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id < MAX_FLOW_ID)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id <= MAX_FLOW_ID / 2)
         {
             // int timeslot = (int)(time * 1e9 / timeslot_len);
             initialize_flow(flow_id, flowType, src, dst, flow_size_bytes, rreq_bytes, time);
@@ -905,7 +909,7 @@ void initialize_flow(int flow_id, int flowType, int src, int dst, int flow_size_
         {
             new_flow->quota = ETH_MTU;
             new_flow->grantState = NET_STATE;
-            new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + per_sw_delay_in_timeslots;
+            new_flow->expected_runtime = 8 / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + per_sw_delay_in_timeslots;
         }
         add_flow(flowlist, new_flow);
         // #ifdef DEBUG_DRIVER

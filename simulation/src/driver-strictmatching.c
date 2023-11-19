@@ -115,22 +115,25 @@ void work_per_timeslot()
         {
             notif_t ntf = tor->notif_queue[i];
             // Check Ntf and sender validity. Make sure the notif needs something and the sender is ready to send.
-            if (!ntf->isGranted && legal_arr[ntf->sender] && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
+            if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
             {
                 // The receiver is ready to receive
                 if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
                 {
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                    legal_arr[ntf->sender] = 0;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
-                    grant->pktType = GRT_TYPE;
-                    grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
-                    ntf->curQuota = grant->reqLen;
-                    ntf->remainingReqLen -= ntf->curQuota;
-                    printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    if (legal_arr[ntf->sender] == 1)
+                    {
+                        ntf->isGranted = 1;
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        legal_arr[ntf->sender] = 0;
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
+                        grant->pktType = GRT_TYPE;
+                        grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
+                        ntf->curQuota = grant->reqLen;
+                        ntf->remainingReqLen -= ntf->curQuota;
+                        printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
@@ -521,6 +524,7 @@ void work_per_timeslot()
                         {
                             if (pkt->seq_num == 0) // Only create a ntf for the first
                             {
+
                                 int idx = tor->ntf_cnt;
                                 tor->notif_queue[idx]->remainingReqLen = pkt->reqLen;
                                 tor->notif_queue[idx]->reqFlowID = pkt->flow_id;

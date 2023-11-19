@@ -1,3 +1,12 @@
+
+/*
+
+
+This is params.h ONLY for short-flow experiment!!!
+
+
+*/
+
 #ifndef __PARAMS_H__
 #define __PARAMS_H__
 
@@ -70,15 +79,15 @@
 // #define UTHRES 20
 #define LINK_CAPACITY 4096
 
-#define MAX_FLOW_ID 100000
+#define MAX_FLOW_ID 20001
 
 #define RTABLE_SIZE MAX_FLOW_ID
 #define ECN_CUTOFF_TOR_UP 40000
 #define ECN_CUTOFF_TOR_DOWN 40000
-#define ECN_WIDTH 1500
+#define ECN_WIDTH 15
 #define TIMEOUT 4000
 #define BLK_SIZE 8
-#define ETH_MTU 1500
+#define ETH_MTU 64
 #define SSTHRESH_START 8192
 #define CWND_START 512
 extern volatile int64_t curr_timeslot;

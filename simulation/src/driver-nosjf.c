@@ -71,20 +71,20 @@ void work_per_timeslot()
         /*---------------------------------------------------------------------------*/
         // Bounding concurrent flows (BlockType-mapping)
         /*---------------------------------------------------------------------------*/
-        // for (int i = 0; i < NODES_PER_RACK; i++)
-        // {
-        //     node_t node = nodes[i];
-        //     int flowCnt = 0;
-        //     for (int j = 0; j < node->active_flows->num_elements; j++)
-        //     {
-        //         flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
-        //         if (flow->flowType != NET_TYPE)
-        //         {
-        //             flowCnt++;
-        //         }
-        //         assert("More than 200 concurrent flows!" && flowCnt < 200);
-        //     }
-        // }
+        for (int i = 0; i < NODES_PER_RACK; i++)
+        {
+            node_t node = nodes[i];
+            int flowCnt = 0;
+            for (int j = 0; j < node->active_flows->num_elements; j++)
+            {
+                flow_t *flow = (flow_t *)buffer_peek(node->active_flows, j);
+                if (flow->flowType != NET_TYPE)
+                {
+                    flowCnt++;
+                }
+                assert("More than 200 concurrent flows!" && flowCnt < 200);
+            }
+        }
 
         /*---------------------------------------------------------------------------*/
         // ToR -- PROCESS
@@ -109,7 +109,7 @@ void work_per_timeslot()
         /*
         Sort NotifArr, give grant from the head. Whenever available, give it, and dont forget to mark legalArr.
         */
-        qsort(tor->notif_queue, MAX_FLOW_ID, sizeof(notif_t), cmp_ntf);
+        // PLAIN, NO SJF
         // From head to tail, assign grant to each notif.
         for (int i = 0; i < MAX_FLOW_ID; i++)
         {
@@ -872,7 +872,7 @@ void read_tracefile(char *filename)
         int flow_size_bytes = -1;
         int time = -1;
         // mem and net packets are in together. distinguish them when initializing flow
-        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id < MAX_FLOW_ID)
+        while (fscanf(fp, "%d,%d,%d,%d,%d,%d,%d", &flow_id, &flowType, &src, &dst, &flow_size_bytes, &rreq_bytes, &time) >= 7 && flow_id <= MAX_FLOW_ID / 2)
         {
             // int timeslot = (int)(time * 1e9 / timeslot_len);
             initialize_flow(flow_id, flowType, src, dst, flow_size_bytes, rreq_bytes, time);

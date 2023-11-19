@@ -10,6 +10,7 @@ struct node
 {
     int16_t node_index;
     int tokenArr[NODES_PER_RACK];
+
     buffer_t *active_flows;
     flow_t *current_flow;
 

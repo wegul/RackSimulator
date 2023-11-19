@@ -18,6 +18,7 @@ struct notification
     int receiver;
 };
 typedef struct notification *notif_t;
+
 notif_t copy_notif(notif_t src);
 
 struct tor

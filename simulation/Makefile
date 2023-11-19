@@ -35,9 +35,11 @@ default: edm
 
 # list of all the targets to be generated
 edm: $(BINDIR)/driver
-no-match: $(BINDIR)/driver-chunk-nomatching
-no-sjf: $(BINDIR)/driver-chunk-plain
-no-chunk: $(BINDIR)/driver-nochunk-sjf
+strict: $(BINDIR)/driver-strictmatching
+no-match: $(BINDIR)/driver-nomatching
+no-sjf: $(BINDIR)/driver-nosjf
+no-chunk: $(BINDIR)/driver-nochunk
+short: $(BINDIR)/driver-shortflow
 
 # % is the wildcard, $< means the first item to the right of :
 $(OBJDIR)/%.o: $(LIBDIR)/%.c $(INCLUDE)
