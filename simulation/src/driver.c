@@ -5,7 +5,7 @@ static int pkt_size = BLK_SIZE;    // in bytes
 static float link_bandwidth = 100; // in Gbps
 static float timeslot_len;         // in ns
 static int bytes_per_timeslot = 8;
-
+int total_grant = 0;
 float per_hop_propagation_delay_in_ns = 10;
 int per_hop_propagation_delay_in_timeslots;
 float per_sw_delay_in_ns = 500;
@@ -109,28 +109,32 @@ void work_per_timeslot()
         /*
         Sort NotifArr, give grant from the head. Whenever available, give it, and dont forget to mark legalArr.
         */
-        qsort(tor->notif_queue, MAX_FLOW_ID, sizeof(notif_t), cmp_ntf);
+        qsort(tor->notif_queue, min(tor->ntf_cnt + 1, MAX_FLOW_ID), sizeof(notif_t), cmp_ntf);
         // From head to tail, assign grant to each notif.
-        for (int i = 0; i < MAX_FLOW_ID; i++)
+        for (int i = 0; i < min(tor->ntf_cnt + 1, MAX_FLOW_ID); i++)
         {
             notif_t ntf = tor->notif_queue[i];
             // Check Ntf and sender validity. Make sure the notif needs something and the sender is ready to send.
-            if (!ntf->isGranted && legal_arr[ntf->sender] && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
+            if (!ntf->isGranted && ntf->remainingReqLen > 0 && ntf->reqFlowID >= 0)
             {
                 // The receiver is ready to receive
                 if (tor->downstream_mem_buffer_lock[ntf->receiver] < 0)
                 {
-                    ntf->isGranted = 1;
-                    tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
-                    legal_arr[ntf->sender] = 0;
-                    // Send grant to future msg_sender
-                    packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
-                    grant->pktType = GRT_TYPE;
-                    grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
-                    ntf->curQuota = grant->reqLen;
-                    ntf->remainingReqLen -= ntf->curQuota;
-                    printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
-                    assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    if (legal_arr[ntf->sender] == 1 || ntf->remainingReqLen <= 24 * CHUNK_SIZE)
+                    {
+                        ntf->isGranted = 1;
+                        total_grant++;
+                        tor->downstream_mem_buffer_lock[ntf->receiver] = ntf->sender;
+                        legal_arr[ntf->sender] = 0;
+                        // Send grant to future msg_sender
+                        packet_t grant = create_packet(ntf->receiver, ntf->sender, ntf->reqFlowID /*flowid*/, BLK_SIZE, -1, packet_counter++);
+                        grant->pktType = GRT_TYPE;
+                        grant->reqLen = min(ntf->remainingReqLen, CHUNK_SIZE);
+                        ntf->curQuota = grant->reqLen;
+                        ntf->remainingReqLen -= ntf->curQuota;
+                        printf("Grant %d to %d, flow: %d, quota: %d, remain: %d, curr: %d\n", ntf->receiver, ntf->sender, ntf->reqFlowID, grant->reqLen, ntf->remainingReqLen, curr_timeslot);
+                        assert("TOR GRANT OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[ntf->sender], grant) != -1);
+                    }
                 }
             }
         }
@@ -330,7 +334,7 @@ void work_per_timeslot()
                             // Update flow state
                             if (flow->active == 0)
                             {
-                                printf("Flow %d started at %d with delay %d\n", flow->flow_id, curr_timeslot, curr_timeslot - flow->timeslot);
+                                printf("Flow %d started with delay %d, remaining: %d\n", flow->flow_id, curr_timeslot - flow->timeslot, flowlist->num_flows - total_flows_started);
                                 flowlist->active_flows++;
                                 flow->start_timeslot = curr_timeslot;
                                 total_flows_started++;
@@ -357,7 +361,10 @@ void work_per_timeslot()
                             {
                                 node->current_flow = NULL;
                             }
-                            // printf("host %d sent (%d), flowid: %d, cnt: %d, seq:%d, deq: %d\n", node->node_index, mem_pkt->pktType, mem_pkt->flow_id, mem_pkt->pkt_id, mem_pkt->seq_num, mem_pkt->time_to_dequeue_from_link);
+                            if (curr_timeslot > 4180)
+                            {
+                                printf("host %d sent (%d), flowid: %d, cnt: %d, seq:%d, deq: %d\n", node->node_index, mem_pkt->pktType, mem_pkt->flow_id, mem_pkt->pkt_id, mem_pkt->seq_num, mem_pkt->time_to_dequeue_from_link);
+                            }
                         }
                     }
                 }
@@ -389,7 +396,7 @@ void work_per_timeslot()
                         // Update flow state
                         if (flow->active == 0)
                         {
-                            printf("Flow %d started with delay %d\n", flow->flow_id, curr_timeslot - flow->timeslot);
+                            printf("Flow %d started with delay %d, remaining: %d\n", flow->flow_id, curr_timeslot - flow->timeslot, flowlist->num_flows - total_flows_started);
                             flowlist->active_flows++;
                             flow->start_timeslot = curr_timeslot;
                             total_flows_started++;
@@ -683,7 +690,7 @@ void work_per_timeslot()
                             flow->finish_timeslot = curr_timeslot;
                             num_of_flows_finished++;
                             write_to_outfile(out_fp, flow, timeslot_len, link_bandwidth);
-                            printf("%d: Flow %d finished in %d timeslots, %d blocks received\n", (int)curr_timeslot, (int)flow->flow_id, (int)(flow->finish_timeslot - flow->timeslot), flow->pkts_received);
+                            printf("%d: Flow %d finished in %d timeslots, %d blocks received, remaining: %d\n", (int)curr_timeslot, (int)flow->flow_id, (int)(flow->finish_timeslot - flow->timeslot), flow->pkts_received, flowlist->num_flows - num_of_flows_finished);
                             fflush(stdout);
                         }
                     }
@@ -830,6 +837,19 @@ int cmp_ntf(const void *a, const void *b)
 {
     notif_t notif1 = *(notif_t *)a;
     notif_t notif2 = *(notif_t *)b;
+
+    if (notif1->remainingReqLen <= 0 && notif2->remainingReqLen <= 0)
+    {
+        return 0;
+    }
+    if (notif1->remainingReqLen <= 0)
+    {
+        return 1;
+    }
+    if (notif2->remainingReqLen <= 0)
+    {
+        return -1;
+    }
 
     if (notif1->remainingReqLen < notif2->remainingReqLen)
     {
