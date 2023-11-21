@@ -1,6 +1,6 @@
 # Use this in RAW directory. It'll generate all ready-to-go traces
 
-SCRIPT_DIR="$HOME/Desktop/RackSimulator/simulation/scripts"
+SCRIPT_DIR="$HOME/Desktop/RackSimulator/scripts"
 
 if [[ "$#" < 2 ]]; then
     echo "Usage: $0 <output path name> <bandwidth>"
@@ -19,7 +19,7 @@ fi
 
 # preprocess to generate proced*
 for file in *.csv; do
-    if [[ $file == graphlab*.csv || $file == bdp*.csv || $file == memcached*.csv ]]; then
+    if [[ $file == graphlab*.csv || $file == bdp*.csv || $file == memcached*.csv || $file == terasortSpark*.csv || $file == tersortHadoop*.csv ]]; then
         echo "python3 ${SCRIPT_DIR}/tracefile_preprocessor.py -fi ${file} -fo ${outpath}/${file} -ism 1 -b ${bw}"
         python3 ${SCRIPT_DIR}/tracefile_preprocessor.py -fi ${file} -fo ${outpath}/proced_${file} -ism 1 -b ${bw}
     elif [[ $file != proced*.csv ]]; then

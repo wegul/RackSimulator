@@ -11,12 +11,13 @@ if [[ ! -d $outpath ]]; then
 fi
 
 for file in *.csv; do
-    if [[ "$file" == tera*.csv ]]; then
-        echo python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi "${file}" -ism 1 -fo "${outpath}/proced_${file} -b 100"
-        python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi "${file}" -ism 1 -fo "${outpath}/proced_${file}" -b 100
-    else
-        echo python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi "${file}" -ism 0 -fo "${outpath}/proced_${file} -b 100"
-        # python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi "${file}" -ism 0 -fo "${outpath}/proced_${file}" -b 100
+    if [[ "$file" == trace*45.csv ]]; then
+        echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "${outpath}/proced_8B_${file} -b 100"
+        python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "${outpath}/proced_8B_${file}" -b 100
+        # else
+        echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 0 -fo "${outpath}/netVer_8B_${file} -b 100"
+        python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 0 -fo "${outpath}/netVer_8B_${file}" -b 100
+
     fi
 done
 

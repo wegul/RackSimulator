@@ -62,7 +62,7 @@ def main():
         for i in range(0, trace.shape[0]):
             flowType = random.randint(2, 3)
             if flowType == 2:  # Change to RREQ
-                flowType = 2
+                flowType = 1
                 flowSize[i] = 16
             flowType_arr.append(flowType)
     else:

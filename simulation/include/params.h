@@ -41,9 +41,9 @@
 #define GRT_TYPE 5
 #define TKN_TYPE 6
 #define NET_TYPE 100
-#define NOTIF_STATE 1
+#define NOTIF_STATE 10
 #define WAITING_STATE -1
-#define GRANTED_STATE 10
+#define GRANTED_STATE 1
 #define NET_STATE 100
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -64,13 +64,13 @@
 // Queue Size
 #define TOR_UPSTREAM_BUFFER_LEN 50000
 #define TOR_DOWNSTREAM_BUFFER_LEN 50000
-#define TOR_UPSTREAM_MEMBUF_LEN (5 * NODES_PER_RACK)
-#define TOR_DOWNSTREAM_MEMBUF_LEN (5 * NODES_PER_RACK)
+#define TOR_UPSTREAM_MEMBUF_LEN (4 * NODES_PER_RACK)
+#define TOR_DOWNSTREAM_MEMBUF_LEN (4 * NODES_PER_RACK)
 #define QTHRES (TOR_DOWNSTREAM_MEMBUF_LEN - NODES_PER_RACK)
 // #define UTHRES 20
 #define LINK_CAPACITY 4096
 
-#define MAX_FLOW_ID 109999
+#define MAX_FLOW_ID 160999
 
 #define RTABLE_SIZE MAX_FLOW_ID
 #define ECN_CUTOFF_TOR_UP 40000

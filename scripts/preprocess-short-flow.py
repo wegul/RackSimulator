@@ -60,14 +60,15 @@ def main():
     if isMem == 1:
         for i in range(0, trace.shape[0]):
             flowType = 3
+            flowSize[i] = 8
             # flowType = random.randint(2, 3)
             if flowType == 2:  # Change to RREQ
                 flowType = 2
                 flowSize[i] = 24
             flowType_arr.append(flowType)
     else:
-        if flowSize[66] < 64:
-            flowSize = [64]*trace.shape[0]
+
+        flowSize = [64]*trace.shape[0]
         flowType_arr = [100]*trace.shape[0]
     trace.iloc[:, 3] = pd.Series(flowSize)
     trace.insert(1, column=None, value=flowType_arr)
