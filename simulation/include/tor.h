@@ -16,6 +16,8 @@ struct notification
     int isGranted; // Denote that this grant is sent out and that the quota has not run out yet.
     int sender;    // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
     int receiver;
+
+    int isRREQFirst;// if is RREQ, generate 2 bloc.
 };
 typedef struct notification *notif_t;
 

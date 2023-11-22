@@ -6,7 +6,7 @@ BINDIR = bin
 INCLUDEDIR = include
 LIBDIR = lib
 
-CFLAGS = -std=gnu99 -g -Wall -I$(INCLUDEDIR)
+CFLAGS = -std=gnu99 -g -O2 -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 
 #CFLAGS += -DDEBUG_DRIVER
@@ -40,6 +40,7 @@ no-match: $(BINDIR)/driver-nomatching
 no-sjf: $(BINDIR)/driver-nosjf
 no-chunk: $(BINDIR)/driver-nochunk
 short: $(BINDIR)/driver-shortflow
+rreq: $(BINDIR)/driver-rreq
 
 # % is the wildcard, $< means the first item to the right of :
 $(OBJDIR)/%.o: $(LIBDIR)/%.c $(INCLUDE)

@@ -9,10 +9,6 @@ node_t create_node(int16_t node_index)
 
     self->active_flows = create_buffer(MAX_FLOW_ID);
     self->current_flow = NULL;
-    for (int i = 0; i < NODES_PER_RACK; i++)
-    {
-        self->tokenArr[i] = 1;
-    }
 
     for (int i = 0; i < MAX_FLOW_ID; ++i)
     {

@@ -33,6 +33,7 @@ tor_t create_tor(int16_t tor_index)
         self->notif_queue[i]->remainingReqLen = -1;
         self->notif_queue[i]->sender = -1;
         self->notif_queue[i]->receiver = -1;
+        self->notif_queue[i]->isRREQFirst = 0;
     }
 
     create_routing_table(self->routing_table);
