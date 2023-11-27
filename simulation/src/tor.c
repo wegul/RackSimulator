@@ -19,13 +19,7 @@ tor_t create_tor(int16_t tor_index)
     {
         self->notif_queue[i] = malloc(sizeof(struct notification));
     }
-    for (int i = 0; i < NODES_PER_RACK; i++)
-    {
-        for (int j = 0; j < NODES_PER_RACK; j++)
-        {
-            self->tokenArr[i][j] = 0;
-        }
-    }
+
     for (int i = 0; i < MAX_FLOW_ID; i++)
     {
         self->notif_queue[i]->reqFlowID = -1;
@@ -35,8 +29,6 @@ tor_t create_tor(int16_t tor_index)
         self->notif_queue[i]->receiver = -1;
         self->notif_queue[i]->isRREQFirst = 0;
     }
-
-    create_routing_table(self->routing_table);
     return self;
 }
 

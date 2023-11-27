@@ -7,6 +7,14 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     MALLOC_TEST(self, __LINE__);
     self->pktType = NET_TYPE; // Default Net packet
     self->reqLen = -1;        // Default
+    self->batchNum = -1;
+    for (int i = 0; i < MAXBATCH; i++)
+    {
+        self->batchDst[i] = -1;
+        self->batchSrc[i] = -1;
+        self->batchFlowID[i] = -1;
+        self->batchReqLen[i] = -1;
+    }
 
     self->src_node = src_node;
     self->dst_node = dst_node;

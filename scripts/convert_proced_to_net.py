@@ -23,23 +23,15 @@ def main():
     newfilename = args.fo
     trace = pd.read_csv(filename, header=None)
 
-    # Change ReqLen to FlowSize
-    reqLen = trace.iloc[:, 5].values
-    old_flowSize = trace.iloc[:, 4].values
-    for i in range(0, len(reqLen)):
-        if reqLen[i] > 0:
-            old_flowSize[i] = reqLen[i]
-            reqLen[i] = -1
+    flowTypes = trace.iloc[:, 1].values
+    traceSize=trace.shape[0]
+    for i in range(0,traceSize):
+        if flowTypes[i] ==1: #RREQ, change to 101
+            flowTypes[i]=101
+        else:
+            flowTypes[i] = 100
 
-    # Leave a mem mark
-    oldflowType_arr = trace.iloc[:, 1].values.copy()
-    for i in range(0, len(oldflowType_arr)):
-        if oldflowType_arr[i] != 100:
-            reqLen[i] = 666
-
-    # Change flowType to NET_TYPE
-    flowType_arr = [100]*trace.shape[0]  # NET_TYPE
-    trace.iloc[:, 1] = flowType_arr
+    trace.iloc[:, 1] = flowTypes
 
     trace.to_csv(newfilename, header=False, index=False)
 

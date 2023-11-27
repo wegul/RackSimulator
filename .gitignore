@@ -12,5 +12,5 @@ simulation/balanced_case_*
 simulation/nohup.out
 simulation/mn*
 log*
-*.csv
 *.out
+*.csv

@@ -6,7 +6,7 @@ BINDIR = bin
 INCLUDEDIR = include
 LIBDIR = lib
 
-CFLAGS = -std=gnu99 -g -O2 -Wall -I$(INCLUDEDIR)
+CFLAGS = -std=gnu99 -g -O3 -Wall -I$(INCLUDEDIR)
 LFLAGS = -lm -pthread
 
 #CFLAGS += -DDEBUG_DRIVER
@@ -34,13 +34,16 @@ OBJ = $(OBJDIR)/arraylist.o \
 default: edm
 
 # list of all the targets to be generated
-edm: $(BINDIR)/driver
-strict: $(BINDIR)/driver-strictmatching
-no-match: $(BINDIR)/driver-nomatching
-no-sjf: $(BINDIR)/driver-nosjf
-no-chunk: $(BINDIR)/driver-nochunk
-short: $(BINDIR)/driver-shortflow
-rreq: $(BINDIR)/driver-rreq
+edm: $(BINDIR)/driver-edm
+ndp: $(BINDIR)/driver-ndp
+pfc: $(BINDIR)/driver-pfc
+pfc-alone: $(BINDIR)/driver-pfc-obslt
+dctcp: $(BINDIR)/driver-dctcp
+pfabric: $(BINDIR)/driver-pfabric
+fastpass: $(BINDIR)/driver-fastpass
+
+batch: $(BINDIR)/driver-batch-edm
+test: $(BINDIR)/test
 
 # % is the wildcard, $< means the first item to the right of :
 $(OBJDIR)/%.o: $(LIBDIR)/%.c $(INCLUDE)

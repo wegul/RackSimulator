@@ -19,6 +19,7 @@ flow_t *create_flow(int64_t flow_id, int64_t flow_size_bytes, int16_t host_index
     self->timeslots_active = 0;
     self->pkts_sent = 0;
     self->pkts_received = 0;
+    self->pkts_dropped = 0;
     self->bytes_sent = 0;
     self->bytes_received = 0;
     self->expected_runtime = 0;

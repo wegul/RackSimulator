@@ -12,27 +12,30 @@ MAX_FLOW_ID = -1
 
 class Flow:
     def __init__(self, elmts):
-        self.flowId = int(elmts[0])
-        self.flowType = int(elmts[1])
-        self.src = int(elmts[2])
-        self.dst = int(elmts[3])
-        self.flowSize = int(elmts[4])
-        # self.reqLen = int(elmts[5])
-        self.createTime = int(elmts[5])
-        self.notifTime = int(elmts[6])
-        self.grantTime = int(elmts[7])
-        self.startTime = int(elmts[8])
-        self.finishTime = int(elmts[9])
-        self.fct = int(elmts[10])
-        self.sld = int(elmts[11])
-        self.xput = int(elmts[12])
-        self.idealStart = self.createTime
-        self.started = False
+        elmts = np.array(elmts)
+        self.FlowID = int(elmts[0])
+        self.FlowType = int(elmts[1])
+        self.Src = int(elmts[2])
+        self.Dst = int(elmts[3])
+        self.FlowSize = int(elmts[4])
+        self.ReqLen = int(elmts[5])
+        self.Create = int(elmts[6])
+        # self.notifTime = int(elmts.iloc[6])
+        # self.grantTime = int(elmts.iloc[7])
+        # self.startTime = int(elmts.iloc[8])
+        # self.finishTime = int(elmts.iloc[9])
+        # self.fct = int(elmts.iloc[10])
+        # self.sld = int(elmts.iloc[11])
+        # self.xput = int(elmts.iloc[12])
+
+        self.idealStart = -1
+
+        # self.rreqIdealStart = self.Create
+        # self.rrespIdealCreate = self.rreqIdealStart+33
+        # self.rrespIdealStart = -1
 
     def toArr(self):
-        return [self.flowId, self.flowType, self.src, self.dst, self.flowSize, self.createTime, self.notifTime,
-                self.grantTime, self.startTime, self.finishTime, self.fct, self.sld, self.xput,
-                self.idealStart]
+        return [self.FlowID, self.FlowType, self.Src, self.Dst, self.FlowSize, self.ReqLen, self.Create, self.idealStart]
 
 
 def init_FlowList(trace):
@@ -52,72 +55,75 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-fi', required=True)
     parser.add_argument('-fo', required=True)
+    parser.add_argument('-sz', required=True)
     args = parser.parse_args()
     filename = args.fi
     newfilename = args.fo
+    sz = (int)(args.sz)
+    sz = int(sz/8)
 
     print("Reading ", filename, "...")
 
     # trace = pd.read_csv(filename, header=None)
-    trace = pd.read_csv(filename)
+    trace = pd.read_csv(filename, header=None)
     MAX_FLOW_ID = trace.shape[0]
 
     cur_timeslot = 0
     flowList = init_FlowList(trace=trace)
     totalFlowStarted = 0
     activeFlows = []
-    startedFlows = []
 
     print("Starting calculation...")
 
-    # FlowID-0, FlowType-1, Src-2, Dst-3, FlowSize-4, ReqSize=5(ignore), CreateTime-6
+    send_busy = np.zeros(shape=(144, 1))
+    recv_busy = np.zeros(shape=(144, 1))
+
+    # FlowID-0, FlowType-1, Src-2, Dst-3, FlowSize-4, ReqSize=5(ignore), Create-6
     while totalFlowStarted < MAX_FLOW_ID:
         # Activate flows for each node
         for i in range(0, MAX_FLOW_ID):
             flow = flowList[i]
-            if flow.createTime == cur_timeslot:
+            if flow.Create == cur_timeslot:
                 activeFlows.append(flow)
 
         # In each timeslot, sort activeFlows by creation time
-        activeFlows = sorted(activeFlows, key=lambda f: f.createTime)
+        activeFlows = sorted(
+            activeFlows, key=lambda f: f.Create)
         send_busy = np.zeros(shape=(144, 1))
         recv_busy = np.zeros(shape=(144, 1))
+
         for idx in range(0, len(activeFlows)):
             flow = activeFlows[idx]
-            src = flow.src
-            dst = flow.dst
-            if send_busy[src] == 0 and recv_busy[dst] == 0 and not flow.started:
+            Src = flow.Src
+            Dst = flow.Dst
+            if send_busy[Src] == 0 and recv_busy[Dst] == 0 and flow.idealStart < 0:
                 flow.idealStart = cur_timeslot
-                flow.started = True
                 totalFlowStarted += 1
-                send_busy[src] = 1
-                recv_busy[dst] = 1
-                # print("Assign flow {0}: {1} -> {2}, left: {3}".format(flow.flowId,
-                #                                            flow.createTime, flow.idealStart, MAX_FLOW_ID-totalFlowStarted))
-        # Remove those already started
+                send_busy[Src] = 1
+                recv_busy[Dst] = 1
+
+        # # Remove those already started
         nextActiveFlows = []
         for flow in activeFlows:
-            if not flow.started:
+            if flow.idealStart < 0:
                 nextActiveFlows.append(flow)
         activeFlows = nextActiveFlows
-
-        cur_timeslot += 1
+        cur_timeslot += sz
 
     print("Finished!, total flow started = ", totalFlowStarted)
 
     # Write to output file
-    idealStart_list = []
-    idealSld_list = []
+    newFlowTrace = pd.DataFrame([vars(t) for t in flowList])
+    idealFCT_list = []
     for i in range(0, MAX_FLOW_ID):
         flow = flowList[i]
-        idealStart_list.append(flow.idealStart)
-        sld = (flow.fct)/(flow.idealStart-flow.createTime+33)
-        idealSld_list.append(sld)
+        idealFCT_list.append(
+            flow.idealStart+34-flow.Create)  # rresp.ReqLen is its RREQ's create time.
 
-    trace['IdealStart'] = idealStart_list
-    trace['IdealSlowdown'] = idealSld_list
+    newFlowTrace['IdealFCT'] = idealFCT_list
+    newFlowTrace.to_csv(newfilename, index=None)
 
-    trace.to_csv(newfilename)
+    # trace.to_csv(newfilename, header=None, index=None)
 
 
 if __name__ == '__main__':

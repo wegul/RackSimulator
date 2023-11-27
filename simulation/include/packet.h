@@ -19,7 +19,12 @@ struct packet
     int reqLen; /*If it is a nofitication or grant, it'll have a req_len.
                 If a NTF or RREQ, this is total # of bytes that will be send
                 Else it is a GRT, this is min(total remain #, CHUNKSIZE)*/
-    
+
+    int batchNum; // If >0, then has a batch.
+    int batchReqLen[MAXBATCH];
+    int batchFlowID[MAXBATCH];
+    int batchSrc[MAXBATCH];
+    int batchDst[MAXBATCH];
 
     int16_t src_node;
     int16_t dst_node;

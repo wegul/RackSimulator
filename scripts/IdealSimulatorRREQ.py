@@ -10,6 +10,24 @@ from queue import PriorityQueue
 MAX_FLOW_ID = -1
 
 
+class Node:
+    def __init__(self, id):
+        self.NodeID = id
+        self.sAvl = 1
+        self.nxtSAvl = -1
+
+        self.rAvl = 1
+        self.nxtRAvl = -1
+
+
+def init_BusyList(nodeNum):
+    busyList = np.empty(nodeNum, dtype=Node)
+    for i in range(0, nodeNum):
+        node = Node(i)
+        busyList[i] = node
+    return busyList
+
+
 class Flow:
     def __init__(self, elmts):
         elmts = np.array(elmts)
@@ -20,6 +38,7 @@ class Flow:
         self.FlowSize = int(elmts[4])
         self.ReqLen = int(elmts[5])
         self.Create = int(elmts[6])
+        self.requestedAt = -1
         # self.notifTime = int(elmts.iloc[6])
         # self.grantTime = int(elmts.iloc[7])
         # self.startTime = int(elmts.iloc[8])
@@ -66,16 +85,12 @@ def main():
     MAX_FLOW_ID = trace.shape[0]
 
     cur_timeslot = 0
+    busyList = init_BusyList(144)
     flowList = init_FlowList(trace=trace)
     totalFlowStarted = 0
     activeFlows = []
 
     print("Starting calculation...")
-
-    send_busy = np.zeros(shape=(144, 1))
-    recv_busy = np.zeros(shape=(144, 1))
-    next_send_busy = np.zeros(shape=(144, 1))
-    next_recv_busy = np.zeros(shape=(144, 1))
 
     # FlowID-0, FlowType-1, Src-2, Dst-3, FlowSize-4, ReqSize=5(ignore), Create-6
     while totalFlowStarted < MAX_FLOW_ID:
@@ -88,36 +103,34 @@ def main():
         # In each timeslot, sort activeFlows by creation time
         activeFlows = sorted(
             activeFlows, key=lambda f: (-f.FlowType, f.Create))
-        send_busy = next_send_busy.copy()
-        recv_busy = next_recv_busy.copy()
-        next_send_busy = np.zeros(shape=(144, 1))
-        next_recv_busy = np.zeros(shape=(144, 1))
 
         for idx in range(0, len(activeFlows)):
             flow = activeFlows[idx]
             Src = flow.Src
             Dst = flow.Dst
-            if send_busy[Src] == 0 and recv_busy[Dst] == 0 and flow.idealStart < 0:
+            if busyList[Src].sAvl == 1 and busyList[Dst].rAvl == 1 and flow.idealStart < 0:
                 if flow.FlowType == 1:
                     flow.idealStart = cur_timeslot
                     totalFlowStarted += 1
-                    send_busy[Src] = 1
-                    recv_busy[Dst] = 1
-                    next_send_busy[Src] = 1
-                    next_recv_busy[Dst] = 1  # RREQ has 2 blocks
+                    busyList[Src].sAvl = 0  # Not available any more
+                    busyList[Dst].rAvl = 0
+                    busyList[Src].nxtSAvl = cur_timeslot+2
+                    busyList[Dst].nxtRAvl = cur_timeslot+2  # RREQ has 2 blocks
 
                     # Create RRESP
                     rresp = Flow([MAX_FLOW_ID, 2, flow.Dst,
-                                 flow.Src, 8, flow.Create, flow.idealStart+33])
+                                 flow.Src, flow.ReqLen, -1, flow.idealStart+33])
+                    rresp.requestedAt = flow.Create
                     MAX_FLOW_ID += 1
                     flowList = np.append(flowList, rresp)
                 elif flow.FlowType == 2:
                     flow.idealStart = cur_timeslot
                     totalFlowStarted += 1
-                    send_busy[Src] = 1
-                    recv_busy[Dst] = 1
-                    next_send_busy[Src] = 0
-                    next_recv_busy[Dst] = 0
+                    busyList[Src].sAvl = 0
+                    busyList[Dst].rAvl = 0
+
+                    busyList[Src].nxtSAvl = cur_timeslot+(int)(flow.FlowSize/8)
+                    busyList[Dst].nxtRAvl = cur_timeslot+(int)(flow.FlowSize/8)
 
         # # Remove those already started
         nextActiveFlows = []
@@ -126,6 +139,15 @@ def main():
                 nextActiveFlows.append(flow)
         activeFlows = nextActiveFlows
         cur_timeslot += 1
+
+        for i in range(0, 144):
+            node = busyList[i]
+            if node.sAvl == 0 and node.nxtSAvl == cur_timeslot:
+                node.sAvl = 1
+                node.nxtSAvl = -1
+            if node.rAvl == 0 and node.nxtRAvl == cur_timeslot:
+                node.rAvl = 1
+                node.nxtRAvl = -1
 
     print("Finished!, total flow started = ", totalFlowStarted)
 
@@ -136,10 +158,10 @@ def main():
         flow = flowList[i]
         if flow.FlowType == 1:
             idealFCT_list.append(
-                flow.idealStart+35-flow.Create)
+                flow.idealStart+34 + (int)(flow.FlowSize/8)-flow.Create)
         else:
             idealFCT_list.append(
-                flow.idealStart+34-flow.ReqLen)  # rresp.ReqLen is its RREQ's create time.
+                flow.idealStart+33 + (int)(flow.FlowSize/8)-flow.ReqLen)  # rresp.ReqLen is its RREQ's create time.
 
     newFlowTrace['IdealFCT'] = idealFCT_list
     newFlowTrace.to_csv(newfilename, index=None)

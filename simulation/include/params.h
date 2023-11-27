@@ -39,10 +39,9 @@
 #define WREQ_TYPE 3
 #define NTF_TYPE 4
 #define GRT_TYPE 5
-#define TKN_TYPE 6
 #define NET_TYPE 100
 #define NOTIF_STATE 10
-#define WAITING_STATE -1
+#define WAITING_STATE 9999
 #define GRANTED_STATE 1
 #define NET_STATE 100
 #define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -62,23 +61,24 @@
 #define TOR_PORT_COUNT_UP 0
 
 // Queue Size
-#define TOR_UPSTREAM_BUFFER_LEN 50000
-#define TOR_DOWNSTREAM_BUFFER_LEN 50000
+#define TOR_UPSTREAM_BUFFER_LEN 20000
+#define TOR_DOWNSTREAM_BUFFER_LEN 20000
+
 #define TOR_UPSTREAM_MEMBUF_LEN (4 * NODES_PER_RACK)
 #define TOR_DOWNSTREAM_MEMBUF_LEN (5 * NODES_PER_RACK)
 #define QTHRES (TOR_DOWNSTREAM_MEMBUF_LEN - 5)
-// #define UTHRES 20
+#define MAXBATCH 1
 #define LINK_CAPACITY 4096
 
-#define MAX_FLOW_ID 205999
+#define MAX_FLOW_ID 80999
 
 #define RTABLE_SIZE MAX_FLOW_ID
-#define ECN_CUTOFF_TOR_UP 40000
-#define ECN_CUTOFF_TOR_DOWN 40000
+#define ECN_CUTOFF_TOR_UP 18000
+#define ECN_CUTOFF_TOR_DOWN 18000
 #define ECN_WIDTH 1500
-#define TIMEOUT 4000
+#define TIMEOUT 40000
 #define BLK_SIZE 8
-#define ETH_MTU 1500
+#define ETH_MTU 8
 #define SSTHRESH_START 8192
 #define CWND_START 512
 extern volatile int64_t curr_timeslot;

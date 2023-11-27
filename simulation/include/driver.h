@@ -23,6 +23,6 @@ int comp(const void *elem1, const void *elem2);
 int cmp_ntf(const void *a, const void *b);
 void open_switch_outfiles(char *base_filename);
 void open_host_outfiles(char *base_filename);
-int calculate_priority(flow_t *flow);
+int cmp_flow(const void *a, const void *b);
 
 #endif

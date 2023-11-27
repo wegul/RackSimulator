@@ -37,9 +37,9 @@ typedef struct flow
     int grantState;
     int quota; // The number of bytes that can be sent in current granted chunk. For Netflow, this is remaining burst.
 
-    int rreq_bytes;      // if this is a RREQ, then this means it is the request length.
-    int grantTime;       // Time of the FIRST grant at ToR
-    int notifTime;       // Time of notif at HOST.
+    int rreq_bytes; // if this is a RREQ, then this means it is the request length.
+    int grantTime;  // Time of the FIRST grant at ToR
+    int notifTime;  // Time of notif at HOST.
 
     int8_t active;
     int8_t finished;
@@ -54,6 +54,7 @@ typedef struct flow
     int64_t timeslots_active; // The number of active timeslots
     int64_t pkts_sent;
     int64_t pkts_received;
+    int pkts_dropped;
     int64_t bytes_sent;
     int64_t bytes_received;
     int64_t expected_runtime;

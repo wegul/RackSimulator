@@ -17,7 +17,7 @@ struct notification
     int sender;    // The sender of mem_msg. If RREQ, sender is pkt->dst_node, else is pkt->src_node
     int receiver;
 
-    int isRREQFirst;// if is RREQ, generate 2 bloc.
+    int isRREQFirst; // if is RREQ, generate 2 bloc.
 };
 typedef struct notification *notif_t;
 
@@ -27,7 +27,6 @@ struct tor
 {
     int16_t tor_index;
     int ntf_cnt;
-    rnode_t routing_table[RTABLE_SIZE];
     // mem buffer
     buffer_t *upstream_mem_buffer[NODES_PER_RACK];
     buffer_t *downstream_mem_buffer[NODES_PER_RACK];
@@ -37,7 +36,6 @@ struct tor
     buffer_t *downstream_send_buffer[NODES_PER_RACK];
     notif_t notif_queue[MAX_FLOW_ID];
     int downstream_mem_buffer_lock[NODES_PER_RACK];
-    int tokenArr[NODES_PER_RACK][NODES_PER_RACK];
 };
 typedef struct tor *tor_t;
 
