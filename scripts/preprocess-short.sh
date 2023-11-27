@@ -10,7 +10,7 @@ cd ./
 #     mkdir -p $outpath
 # fi
 
-declare -a memPrefix=("bdp" "graphlab" "memcached" "terasortHadoop" "terasortSpark")
+declare -a memPrefix=("bdp" "graphlab" "memcached" "terasortHadoop" "terasortSpark" "short")
 declare -a netPrefix=("aditya" "dctcp" "datamining")
 
 for file in *.csv; do
@@ -20,13 +20,17 @@ for file in *.csv; do
                 # para_n=$(echo "${file#*100G-}" | grep -oE '[0-9]+')
                 para_n=${file#*100G-}
                 # echo $para_n
-                echo "python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100"
-                python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100
+                # rreq
+                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0"
+                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0
+                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0"
+                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0
+                # wreq
+                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1"
+                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1
+                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1"
+                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1
 
-                # echo "python3 ~/Desktop/RackSimulator/scripts/convert_proced_to_net.py -fi ../proced/proced_${memName}_${para_n} -fo ../netVer/netVer_${memName}_${para_n}"
-                # python3 ~/Desktop/RackSimulator/scripts/convert_proced_to_net.py -fi ../proced/proced_${memName}_${para_n} -fo ../netVer/netVer_${memName}_${para_n}
-                echo "python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 0 -fo ../netVer/netVer_${memName}_${para_n} -b 100"
-                python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 0 -fo ../netVer/netVer_${memName}_${para_n} -b 100
             fi
         done
 

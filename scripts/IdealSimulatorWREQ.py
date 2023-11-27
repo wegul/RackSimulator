@@ -55,12 +55,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-fi', required=True)
     parser.add_argument('-fo', required=True)
-    parser.add_argument('-sz', required=True)
     args = parser.parse_args()
     filename = args.fi
     newfilename = args.fo
-    sz = (int)(args.sz)
-    sz = int(sz/8)
+    sz=1
 
     print("Reading ", filename, "...")
 
@@ -70,6 +68,7 @@ def main():
 
     cur_timeslot = 0
     flowList = init_FlowList(trace=trace)
+    sz = int((int)(flowList[0].FlowSize)/8)
     totalFlowStarted = 0
     activeFlows = []
 
