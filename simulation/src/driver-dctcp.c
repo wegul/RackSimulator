@@ -94,6 +94,8 @@ void work_per_timeslot()
                 if (dropped < 0)
                 {
                     printf("NET egress port to host: %d drops %d at %d\n", net_pkt->dst_node, net_pkt->pkt_id, curr_timeslot);
+                    flow_t *flow = flowlist->flows[net_pkt->flow_id];
+                    flow->pkts_dropped++;
                 }
 
                 net_pkt = (packet_t)buffer_get(tor->upstream_pkt_buffer[j]);
