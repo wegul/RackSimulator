@@ -34,7 +34,7 @@ typedef struct node *node_t;
 extern node_t *nodes;
 
 node_t create_node(int16_t);
-void track_ecn(node_t, int16_t, int16_t);
+void track_ecn(node_t, int32_t, int16_t);
 void free_node(node_t);
 
 #endif

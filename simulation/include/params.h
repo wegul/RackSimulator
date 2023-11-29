@@ -70,7 +70,7 @@
 #define MAXBATCH 1
 #define LINK_CAPACITY 4096
 
-#define MAX_FLOW_ID 60999
+#define MAX_FLOW_ID 70999
 
 #define RTABLE_SIZE MAX_FLOW_ID
 #define ECN_CUTOFF_TOR_UP 18000
@@ -78,7 +78,7 @@
 #define ECN_WIDTH 1500
 #define TIMEOUT 40000
 #define BLK_SIZE 8
-#define ETH_MTU 8
+#define ETH_MTU 1500
 #define SSTHRESH_START 8192
 #define CWND_START 512
 extern volatile int64_t curr_timeslot;

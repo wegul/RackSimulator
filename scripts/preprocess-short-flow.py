@@ -47,7 +47,7 @@ def main():
                 flowSize[i] = 16
             else:
                 flowType = 3
-                flowSize[i] = 8
+                flowSize[i] = 64
             flowType_arr.append(flowType)
     else:
         for i in range(0, trace.shape[0]):
@@ -56,7 +56,7 @@ def main():
                 flowSize[i] = 16
             else:
                 flowType = 100
-                flowSize[i] = 8
+                flowSize[i] = 64
             flowType_arr.append(flowType)
 
     trace.iloc[:, 3] = pd.Series(flowSize)
@@ -66,7 +66,7 @@ def main():
     reqLen_arr = []
     for i in range(0, len(flowType_arr)):
         if flowType_arr[i] == 1 or flowType_arr[i] == 101:
-            reqLen_arr.append(8)
+            reqLen_arr.append(64)
         else:
             reqLen_arr.append(-1)
     trace.insert(5, column=None, value=reqLen_arr)

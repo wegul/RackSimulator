@@ -20,8 +20,8 @@ for file in *.csv; do
                 # para_n=$(echo "${file#*100G-}" | grep -oE '[0-9]+')
                 para_n=${file#*100G-}
                 # echo $para_n
-                echo "python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100"
-                python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100
+                # echo "python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100"
+                # python3 ~/Desktop/RackSimulator/scripts/tracefile_preprocessor.py -fi ${file} -ism 1 -fo ../proced/proced_${memName}_${para_n} -b 100
 
                 # echo "python3 ~/Desktop/RackSimulator/scripts/convert_proced_to_net.py -fi ../proced/proced_${memName}_${para_n} -fo ../netVer/netVer_${memName}_${para_n}"
                 # python3 ~/Desktop/RackSimulator/scripts/convert_proced_to_net.py -fi ../proced/proced_${memName}_${para_n} -fo ../netVer/netVer_${memName}_${para_n}

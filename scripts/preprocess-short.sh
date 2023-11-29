@@ -10,35 +10,35 @@ cd ./
 #     mkdir -p $outpath
 # fi
 
-declare -a memPrefix=("bdp" "graphlab" "memcached" "terasortHadoop" "terasortSpark" "short")
-declare -a netPrefix=("aditya" "dctcp" "datamining")
+# declare -a memPrefix=("bdp" "graphlab" "memcached" "terasortHadoop" "terasortSpark" "short")
+# declare -a netPrefix=("aditya" "dctcp" "datamining")
 
 for file in *.csv; do
     if [[ "$file" == *.csv ]]; then
-        for memName in "${memPrefix[@]}"; do
-            if [[ "${file}" == "${memName}"*.csv ]]; then
-                # para_n=$(echo "${file#*100G-}" | grep -oE '[0-9]+')
-                para_n=${file#*100G-}
-                # echo $para_n
-                # rreq
-                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0"
-                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0
-                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0"
-                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0
-                # wreq
-                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1"
-                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1
-                echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1"
-                python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1
+        # for memName in "${memPrefix[@]}"; do
+        # if [[ "${file}" == "${memName}"*.csv ]]; then
+        #     # para_n=$(echo "${file#*100G-}" | grep -oE '[0-9]+')
+        #     para_n=${file#*100G-}
+        #     # echo $para_n
+        #     # rreq
+        #     echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0"
+        #     python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/rreq-proced_${memName}_${para_n} -msg 0
+        #     echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0"
+        #     python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/rreq-netVer_${memName}_${para_n} -msg 0
+        #     # wreq
+        #     echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1"
+        #     python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 1 -fo ../proced/wreq-proced_${memName}_${para_n} -msg 1
+        #     echo "python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1"
+        #     python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi ${file} -ism 0 -fo ../netVer/wreq-netVer_${memName}_${para_n} -msg 1
 
-            fi
-        done
+        # fi
+        # done
 
-        # echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "${outpath}/proced_8B_${file} -b 100"
-        # python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "${outpath}/proced_8B_${file}" -b 100
-        # # else
-        # echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 0 -fo "${outpath}/netVer_8B_${file} -b 100"
-        # python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 0 -fo "${outpath}/netVer_8B_${file}" -b 100
+        echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "wreq_32B_${file} -msg 1"
+        python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "wreq_32B_${file}" -msg 1
+
+        echo python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo "rreq_32B_${file} -msg 0"
+        python3 ~/Desktop/RackSimulator/scripts/preprocess-short-flow.py -fi "${file}" -ism 1 -fo rreq_32B_${file} -msg 0
 
     fi
 done

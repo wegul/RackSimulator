@@ -14,3 +14,4 @@ simulation/mn*
 log*
 *.out
 *.csv
+*.txt

@@ -29,7 +29,7 @@ node_t create_node(int16_t node_index)
     return self;
 }
 
-void track_ecn(node_t self, int16_t flow_id, int16_t ecn_mark)
+void track_ecn(node_t self, int32_t flow_id, int16_t ecn_mark)
 {
     // Mark ECN
     self->ecn_marks[flow_id][self->ecn_idx[flow_id]] = ecn_mark;

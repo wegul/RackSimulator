@@ -102,7 +102,7 @@ def main():
 
         # In each timeslot, sort activeFlows by creation time
         activeFlows = sorted(
-            activeFlows, key=lambda f: (-f.FlowType, f.Create))
+            activeFlows, key=lambda f: (f.Create))
 
         for idx in range(0, len(activeFlows)):
             flow = activeFlows[idx]
@@ -123,7 +123,7 @@ def main():
                     rresp.requestedAt = flow.Create
                     MAX_FLOW_ID += 1
                     flowList = np.append(flowList, rresp)
-                elif flow.FlowType == 2:
+                elif flow.FlowType == 2 or flow.FlowType == 3:
                     flow.idealStart = cur_timeslot
                     totalFlowStarted += 1
                     busyList[Src].sAvl = 0
@@ -141,13 +141,12 @@ def main():
         cur_timeslot += 1
 
         for i in range(0, 144):
-            node = busyList[i]
-            if node.sAvl == 0 and node.nxtSAvl == cur_timeslot:
-                node.sAvl = 1
-                node.nxtSAvl = -1
-            if node.rAvl == 0 and node.nxtRAvl == cur_timeslot:
-                node.rAvl = 1
-                node.nxtRAvl = -1
+            if busyList[i].nxtSAvl == cur_timeslot:
+                busyList[i].sAvl = 1
+                busyList[i].nxtSAvl = -1
+            if busyList[i].nxtRAvl == cur_timeslot:
+                busyList[i].rAvl = 1
+                busyList[i].nxtRAvl = -1
 
     print("Finished!, total flow started = ", totalFlowStarted)
 
@@ -158,12 +157,14 @@ def main():
         flow = flowList[i]
         if flow.FlowType == 1:
             idealFCT_list.append(
-                flow.idealStart+34 + (int)(flow.FlowSize/8)-flow.Create)
+                flow.idealStart+32 + (int)(flow.FlowSize/8)-flow.Create)
+        elif flow.FlowType == 2:
+            idealFCT_list.append(
+                flow.idealStart+32 + (int)(flow.FlowSize/8)-flow.requestedAt)  # rresp.ReqLen is its RREQ's create time.
         else:
             idealFCT_list.append(
-                flow.idealStart+33 + (int)(flow.FlowSize/8)-flow.ReqLen)  # rresp.ReqLen is its RREQ's create time.
-
-    newFlowTrace['IdealFCT'] = idealFCT_list
+                flow.idealStart + 34 + (int)(flow.FlowSize/8)-flow.Create)
+    newFlowTrace['FCT'] = idealFCT_list
     newFlowTrace.to_csv(newfilename, index=None)
 
     # trace.to_csv(newfilename, header=None, index=None)
