@@ -14,7 +14,7 @@ int per_sw_delay_in_timeslots;
 volatile int64_t curr_timeslot = 0; // extern var
 int packet_counter = 0;
 
-int burst_size = 175; // = 64Byte Number of blocks to send in a burst
+int burst_size = 1; // = 64Byte Number of blocks to send in a burst
 
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
@@ -47,26 +47,6 @@ links_t links;
 flowlist_t *flowlist;
 int resp2req[MAX_FLOW_ID] = {0};
 int req2resp[MAX_FLOW_ID] = {0};
-
-int cmp_flow(const void *a, const void *b)
-{
-    flow_t *flow1 = *(flow_t **)a;
-    flow_t *flow2 = *(flow_t **)b;
-
-    // shortest remaining size
-    if (flow1->flow_size_bytes - flow1->bytes_received < flow2->flow_size_bytes - flow2->bytes_received)
-    {
-        return -1;
-    }
-    else if (flow1->flow_size_bytes - flow1->bytes_received > flow2->flow_size_bytes - flow2->bytes_received)
-    {
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
-}
 
 void work_per_timeslot()
 {
@@ -110,7 +90,8 @@ void work_per_timeslot()
                     net_pkt->ecn_flag = 1;
                 }
                 // Push into down stream buffer; drop data packets if egress queue has no space
-                int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
+                int dropped = buffer_put(tor->downstream_send_buffer[dst_host], net_pkt);
+                // int dropped = pkt_recv(tor->downstream_send_buffer[dst_host], net_pkt);
                 if (dropped < 0)
                 {
                     int qLen = tor->downstream_send_buffer[dst_host]->num_elements;
@@ -151,7 +132,6 @@ void work_per_timeslot()
         {
             node_t node = nodes[i];
             int16_t node_index = node->node_index;
-            // qsort(node->active_flows->buffer, node->active_flows->num_elements, sizeof(flow_t *), cmp_flow);
             flow_t *peek_flow0 = NULL;
             int minval = INT32_MAX - 1, minidx = -1;
             for (int j = 0; j < node->active_flows->num_elements; j++)
@@ -163,7 +143,6 @@ void work_per_timeslot()
                     minidx = j;
                 }
             }
-
             if (node->current_flow != NULL)
             {
                 if (node->current_flow->quota <= 0) // If burst finished, change to new flow
@@ -186,12 +165,12 @@ void work_per_timeslot()
                     // printf("node %d PeekSelect flow %d, memType: %d, curr: %d \n", node->node_index, node->current_flow->flow_id, node->current_flow->memType, curr_timeslot);
                 }
             }
+
             flow_t *flow = node->current_flow;
 
             // Now that flow is selected, start sending packet
             if (flow)
             {
-                // Set current flow back to null if there are no more bytes left to send from this flow
                 if (flow->finished)
                 {
                     node->current_flow = NULL;
@@ -202,8 +181,6 @@ void work_per_timeslot()
                 int64_t flow_id = flow->flow_id;
                 // Mem flow send packet
 
-                // NetFlow: Send packets from this flow until cwnd is reached or the flow runs out of bytes to send
-
                 int64_t size = BLK_SIZE;
                 int64_t flow_bytes_remaining = flow->flow_size_bytes - node->seq_num[flow->flow_id];
                 int64_t flow_bytes_unacked = node->seq_num[flow->flow_id] - node->last_acked[flow->flow_id];
@@ -211,11 +188,10 @@ void work_per_timeslot()
                 packet_t pkt = NULL;
                 // printf("remainning: %d, unacked: %d, cwnd remain: %d\n", flow_bytes_remaining, flow_bytes_unacked, cwnd_bytes_remaining);
                 // Check outstanding, if timeout, retransmit
-                if (flow_bytes_unacked > 0 && curr_timeslot - node->last_ack_time[flow->flow_id] > TIMEOUT)
+                if (flow_bytes_unacked > ETH_MTU && curr_timeslot - node->last_ack_time[flow->flow_id] > TIMEOUT)
                 {
                     node->seq_num[flow->flow_id] = node->last_acked[flow->flow_id];
                     pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow->flow_id], packet_counter++);
-                    pkt->reqLen = -2; // Pfabric, retransmitted has highest priority.
                     node->seq_num[flow_id] += size;
                     // Refresh timer
                     node->last_ack_time[flow->flow_id] = curr_timeslot;
@@ -227,7 +203,6 @@ void work_per_timeslot()
                 {
                     // Create packet
                     pkt = create_packet(src_node, dst_node, flow_id, size, node->seq_num[flow_id], packet_counter++);
-                    pkt->reqLen = flow_bytes_remaining; // Pfabric
                     node->seq_num[flow_id] += size;
                     // Update flow state
                     if (flow->active == 0)
@@ -243,10 +218,10 @@ void work_per_timeslot()
                     flow->pkts_sent++;
                     flow->timeslots_active++;
                     // Set current flow back to null if there are no more bytes left to send from this flow
-                    if (flow->finished)
-                    {
-                        node->current_flow = NULL;
-                    }
+                }
+                if (flow->finished || flow_bytes_remaining <= 0)
+                {
+                    node->current_flow = NULL;
                 }
                 // Send packet
                 if (pkt)
@@ -265,6 +240,7 @@ void work_per_timeslot()
         // send to each host
         for (int tor_port = 0; tor_port < TOR_PORT_COUNT_LOW; ++tor_port)
         {
+
             int qLen = tor->downstream_send_buffer[tor_port]->num_elements;
             int minval = INT32_MAX - 1, minidx = -1;
             for (int i = 0; i < qLen; i++)
@@ -303,7 +279,9 @@ void work_per_timeslot()
             if (peek_pkt != NULL && peek_pkt->time_to_dequeue_from_link <= curr_timeslot)
             {
                 pkt = link_get(links->host_to_tor_link[src_host][tor_index], 0);
-                int8_t drop = pkt_recv(tor->upstream_pkt_buffer[tor_port], pkt);
+                int8_t drop = buffer_put(tor->upstream_pkt_buffer[tor_port], pkt);
+
+                // int8_t drop = pkt_recv(tor->upstream_pkt_buffer[tor_port], pkt);
                 if (drop < 0)
                 {
                     printf("Upstream drop NET, num: %d\n", tor->upstream_pkt_buffer[tor_port]->num_elements);
@@ -335,16 +313,17 @@ void work_per_timeslot()
                     flow_t *flow = flowlist->flows[pkt->flow_id];
                     assert(flow != NULL);
                     // Check SEQ state, accept only if no BLOCK drop: If received bytes is less than seq, suggesting pkt loss, then reject the whole packet, i.e., return to last_ack
-                    // if (flow->bytes_received + pkt->size < pkt->seq_num)
-                    // {
-                    //     printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
-                    //     // assert(flow->bytes_received + pkt->size >= pkt->seq_num);
-                    //     flow->bytes_received = nodes[flow->src]->last_acked[flow->flow_id];
-                    // }
+                    if (flow->bytes_received + pkt->size < pkt->seq_num)
+                    {
+                        printf("mismatch flow: %d %d-%d recved: %d seq: %d cnt: %d, curr: %d\n", flow->flow_id, pkt->src_node, pkt->dst_node, flow->bytes_received, pkt->seq_num, pkt->pkt_id, curr_timeslot);
+                        // assert(flow->bytes_received + pkt->size >= pkt->seq_num);
+                        flow->bytes_received = nodes[flow->src]->last_acked[flow->flow_id];
+                        flow->bytes_received = pkt->seq_num + pkt->size;
+                    }
                     // else
                     // {
                     // Reply ACK, and write to file as a pkt
-                    if (pkt->seq_num - node->ack_num[pkt->flow_id] > ETH_MTU)
+                    if (pkt->seq_num - node->ack_num[pkt->flow_id] >= 0)
                     {
                         node->ack_num[pkt->flow_id] = pkt->seq_num + pkt->size;
                         packet_t ack = ack_packet(pkt, node->ack_num[pkt->flow_id]);
@@ -372,27 +351,25 @@ void work_per_timeslot()
                         printf("%d: Flow %d finished in %d timeslots, %d blocks received, remaining: %d\n", (int)curr_timeslot, (int)flow->flow_id, (int)(flow->finish_timeslot - flow->timeslot), flow->pkts_received, flowlist->num_flows - num_of_flows_finished);
                         fflush(stdout);
                     }
-                    // }
+                    // {
                 }
                 // Control Packet, then this node is a sender node
                 else
                 {
-#ifdef RECORD_PACKETS
-                    fprintf(host_outfiles[i], "%d, %d, %d, %d, %d, netack, %d\n", (int)pkt->flow_id, (int)pkt->src_node, (int)pkt->dst_node, (int)(curr_timeslot), (int)pkt->time_when_transmitted_from_src, (int)pkt->seq_num);
-#endif
+
                     // Check ECN flag
                     track_ecn(node, pkt->flow_id, pkt->ecn_flag);
                     flow_t *flow = flowlist->flows[pkt->flow_id];
                     // Check ACK value
-                    if (pkt->ack_num > node->last_acked[pkt->flow_id])
+                    if (pkt->ack_num >= node->last_acked[pkt->flow_id])
                     {
                         node->last_acked[pkt->flow_id] = pkt->ack_num;
                         node->last_ack_time[pkt->flow_id] = curr_timeslot;
                     }
-                    else if (pkt->ack_num == node->last_acked[pkt->flow_id]) // Duplicate ack
-                    {
-                        node->last_ack_time[pkt->flow_id] -= TIMEOUT / 3; // fast retransmit
-                    }
+                    // else if (pkt->ack_num == node->last_acked[pkt->flow_id]) // Duplicate ack
+                    // {
+                    //     node->last_ack_time[pkt->flow_id] -= TIMEOUT / 3; // fast retransmit
+                    // }
                 }
             }
             free_packet(pkt);
@@ -603,7 +580,7 @@ void initialize_flow(int flow_id, int flowType, int src, int dst, int flow_size_
         {
             new_flow->quota = ETH_MTU;
             new_flow->grantState = NET_STATE;
-            new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 * per_hop_propagation_delay_in_timeslots + per_sw_delay_in_timeslots;
+            new_flow->expected_runtime = flow_size_bytes / BLK_SIZE + 2 + 2 * per_hop_propagation_delay_in_timeslots + per_sw_delay_in_timeslots;
         }
         add_flow(flowlist, new_flow);
         // #ifdef DEBUG_DRIVER
