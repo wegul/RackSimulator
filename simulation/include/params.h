@@ -62,7 +62,7 @@
 
 // Queue Size
 #define TOR_UPSTREAM_BUFFER_LEN 113
-#define TOR_DOWNSTREAM_BUFFER_LEN 11300
+#define TOR_DOWNSTREAM_BUFFER_LEN 200000
 
 #define TOR_UPSTREAM_MEMBUF_LEN (4 * NODES_PER_RACK)
 #define TOR_DOWNSTREAM_MEMBUF_LEN (5 * NODES_PER_RACK)
@@ -70,17 +70,17 @@
 #define MAXBATCH 1
 #define LINK_CAPACITY 4096
 
-#define MAX_FLOW_ID 30999
+#define MAX_FLOW_ID 40999
 
 #define RTABLE_SIZE MAX_FLOW_ID
-#define ECN_CUTOFF_TOR_UP 100
-#define ECN_CUTOFF_TOR_DOWN 70
-#define ECN_WIDTH 1500
+#define ECN_CUTOFF_TOR_UP 180000
+#define ECN_CUTOFF_TOR_DOWN 70000
+#define ECN_WIDTH 64
 #define TIMEOUT 30000000
 #define BLK_SIZE 8
 #define ETH_MTU 1500
-#define SSTHRESH_START 8192
-#define CWND_START 512
+#define SSTHRESH_START 8192 * 2
+#define CWND_START 5120
 extern volatile int64_t curr_timeslot;
 extern int8_t flow_trace_scanned_completely;
 extern char *ptr;

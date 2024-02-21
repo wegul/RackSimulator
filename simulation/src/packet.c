@@ -8,6 +8,7 @@ packet_t create_packet(int16_t src_node, int16_t dst_node, int64_t flow_id, int6
     self->pktType = NET_TYPE; // Default Net packet
     self->reqLen = -1;        // Default
     self->batchNum = -1;
+    self->remain_size = 0;
     for (int i = 0; i < MAXBATCH; i++)
     {
         self->batchDst[i] = -1;

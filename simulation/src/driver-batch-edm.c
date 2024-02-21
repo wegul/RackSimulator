@@ -18,14 +18,11 @@ int burst_size = 8; // = 64Byte Number of blocks to send in a burst
 int64_t total_bytes_rcvd = 0;
 int64_t total_pkts_rcvd = 0;
 float avg_flow_completion_time = 0;
-float avg_mem_queue_len[NODES_PER_RACK] = {0}, max_mem_queue_len[NODES_PER_RACK] = {0}, avg_net_queue_len[NODES_PER_RACK] = {0}, max_net_queue_len[NODES_PER_RACK] = {0};
+int max_ntf_que_len[NODES_PER_RACK][NODES_PER_RACK] = {{0}};
 
 static volatile int8_t terminate0 = 0;
 static volatile int8_t terminate1 = 0;
-static volatile int8_t terminate2 = 0;
-static volatile int8_t terminate3 = 0;
-static volatile int8_t terminate4 = 0;
-static volatile int8_t terminate5 = 0;
+
 
 volatile int64_t num_of_flows_finished = 0; // extern var
 int CHUNK_SIZE = 256;
@@ -76,12 +73,18 @@ void work_per_timeslot()
         int16_t tor_index = 0;
         //================Ensure at least grant one BDP================
         int inFlightByteNum[NODES_PER_RACK] = {0};
+        int currNtfQLen[NODES_PER_RACK][NODES_PER_RACK] = {{0}};
+
         for (int i = 0; i < MAX_FLOW_ID; i++)
         {
             notif_t ntf = tor->notif_queue[i];
             if (ntf->curQuota > 0 && ntf->reqFlowID >= 0)
             {
                 inFlightByteNum[ntf->receiver] += ntf->curQuota;
+            }
+            if (ntf->reqFlowID >= 0 && ntf->remainingReqLen > BLK_SIZE)
+            {
+                currNtfQLen[ntf->sender][ntf->receiver]++;
             }
             if (ntf->remainingReqLen <= 0)
             {
@@ -95,6 +98,14 @@ void work_per_timeslot()
             if (inFlightByteNum[i] <= 2 * BLK_SIZE * per_hop_propagation_delay_in_timeslots)
             {
                 tor->downstream_mem_buffer_lock[i] = -1;
+            }
+
+            for (int j = 0; j < NODES_PER_RACK; j++)
+            {
+                if (currNtfQLen[i][j] > max_ntf_que_len[i][j])
+                {
+                    max_ntf_que_len[i][j] = currNtfQLen[i][j];
+                }
             }
         }
         //================Shortest req first================
@@ -190,9 +201,6 @@ void work_per_timeslot()
                     printf("tor recv (%d), cnt: %d %d-%d, flowid: %d, curr: %d\n", mem_pkt->pktType, mem_pkt->pkt_id, mem_pkt->src_node, mem_pkt->dst_node, mem_pkt->flow_id, curr_timeslot);
                 }
                 assert("TOR PROC OVERFLOW" && pkt_recv(tor->downstream_mem_buffer[dst_host], mem_pkt) != -1);
-#ifdef RECORD_PACKETS
-                fprintf(tor_outfiles[0], "%d, %d, %d, %d, %d, %d, mem\n", (int)mem_pkt->flow_id, (int)mem_pkt->src_node, (int)mem_pkt->dst_node, (int)mem_pkt->dst_node, (int)(curr_timeslot), (int)mem_pkt->time_when_transmitted_from_src);
-#endif
                 mem_pkt = (packet_t)buffer_get(tor->upstream_mem_buffer[j]);
             }
         }
@@ -335,7 +343,19 @@ void work_per_timeslot()
                         // Update flow state
                         if (flow->active == 0)
                         {
-                            printf("Flow %d started with delay %d, remaining: %d\n", flow->flow_id, curr_timeslot - flow->timeslot, flowlist->num_flows - total_flows_started);
+                            int maxval = -1;
+                            for (int i = 0; i < NODES_PER_RACK; i++)
+                            {
+                                for (int j = 0; j < NODES_PER_RACK; j++)
+                                {
+                                    int tmp = max_ntf_que_len[i][j];
+                                    if (tmp > maxval)
+                                    {
+                                        maxval = tmp;
+                                    }
+                                }
+                            }
+                            printf("Flow %d started with delay %d, remaining: %d, maxQ: %d \n", flow->flow_id, curr_timeslot - flow->timeslot, flowlist->num_flows - total_flows_started, maxval);
                             flowlist->active_flows++;
                             flow->start_timeslot = curr_timeslot;
                             total_flows_started++;
@@ -604,7 +624,7 @@ void work_per_timeslot()
             printf("\n======== All %d flows started ========\n\n", (int)total_flows_started);
             terminate1 = 1;
         }
-        if (terminate0 || terminate1 || terminate2 || terminate3 || terminate4 || terminate5)
+        if (terminate0 || terminate1)
         {
             int completed_flows = 0;
             float flow_completion_times[flowlist->num_flows];
@@ -647,24 +667,6 @@ void work_per_timeslot()
             printf("Finished in %d timeslots\n", (int)curr_timeslot);
             printf("Finished in %d bytes\n", total_bytes_rcvd);
             printf("Finished in %ld packets\n", packet_counter);
-            float avgMemQ = 0, avgNetQ = 0, maxMemQ = 0, maxNetQ = 0;
-            for (int i = 0; i < NODES_PER_RACK; i++)
-            {
-                avgMemQ += avg_mem_queue_len[i];
-                avgNetQ += avg_net_queue_len[i];
-                if (max_mem_queue_len[i] > maxMemQ)
-                {
-                    maxMemQ = max_mem_queue_len[i];
-                }
-                if (max_net_queue_len[i] > maxNetQ)
-                {
-                    maxNetQ = max_net_queue_len[i];
-                }
-            }
-            avgMemQ = avgMemQ / NODES_PER_RACK;
-            avgNetQ = avgNetQ / NODES_PER_RACK;
-            printf("Avg Mem Queue= %f, Max Mem Queue= %f\n", avgMemQ, maxMemQ);
-            printf("Avg Net Queue= %f, Max Net Queue= %f\n", avgNetQ, maxNetQ);
             fflush(stdout);
             break;
         }

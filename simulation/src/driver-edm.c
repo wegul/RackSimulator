@@ -121,6 +121,7 @@ void work_per_timeslot()
                 }
             }
         }
+        
         //================Shortest req first================
         // Generate LEGAL_ARR
         int legal_arr[NODES_PER_RACK];
@@ -799,24 +800,8 @@ void work_per_timeslot()
             printf("Finished in %d timeslots\n", (int)curr_timeslot);
             printf("Finished in %d bytes\n", total_bytes_rcvd);
             printf("Finished in %ld packets\n", packet_counter);
-            float avgMemQ = 0, avgNetQ = 0, maxMemQ = 0, maxNetQ = 0;
-            for (int i = 0; i < NODES_PER_RACK; i++)
-            {
-                avgMemQ += avg_mem_queue_len[i];
-                avgNetQ += avg_net_queue_len[i];
-                if (max_mem_queue_len[i] > maxMemQ)
-                {
-                    maxMemQ = max_mem_queue_len[i];
-                }
-                if (max_net_queue_len[i] > maxNetQ)
-                {
-                    maxNetQ = max_net_queue_len[i];
-                }
-            }
-            avgMemQ = avgMemQ / NODES_PER_RACK;
-            avgNetQ = avgNetQ / NODES_PER_RACK;
-            printf("Avg Mem Queue= %f, Max Mem Queue= %f\n", avgMemQ, maxMemQ);
-            printf("Avg Net Queue= %f, Max Net Queue= %f\n", avgNetQ, maxNetQ);
+            
+
             fflush(stdout);
             break;
         }

@@ -17,54 +17,6 @@ void print_network_tput(int64_t total_bytes, int64_t total_pkts, int64_t ns)
     printf("Packets per ns: %0.2f p pns\n", (double)total_pkts / ns);
 }
 
-// void print_cache_stats(int64_t cache_misses, int64_t cache_hits)
-// {
-//     printf("Number of cache accesses: %ld\n", cache_misses + cache_hits);
-//     printf("Number of cache hits: %ld\n", cache_hits);
-//     printf("Number of cache misses: %ld\n", cache_misses);
-//     if (cache_misses + cache_hits > 0)
-//     {
-//         printf("Percent of cache access misses: %0.2f%%\n", (double)cache_misses * 100 / (cache_misses + cache_hits));
-//     }
-// }
-
-// void print_per_cache_stats(spine_t *spines, tor_t *tors)
-// {
-//     printf("Per-Spine SRAM cache misses: [%ld", spines[0]->cache_misses);
-//     for (int i = 1; i < NUM_OF_SPINES; i++)
-//     {
-//         printf(", %ld", spines[i]->cache_misses);
-//     }
-//     printf("]\n");
-//     printf("Per-ToR SRAM cache misses: [%ld", tors[0]->cache_misses);
-//     for (int i = 1; i < NUM_OF_RACKS; i++)
-//     {
-//         printf(", %ld", tors[i]->cache_misses);
-//     }
-//     printf("]\n");
-// }
-
-// void print_tor_stats(tor_t * tors) {
-//     for (int i = 0; i < NUM_OF_TORS; i++) {
-//         printf("Max Upstream Queue Lens at Tor %d:\n[", i);
-//         for(int j = 0; j < NUM_OF_SPINES; j++) {
-//             if (j != 0) {
-//                 printf(", ");
-//             }
-//             printf("%d", (int) tors[i]->upstream_queue_stat[j]->max_val);
-//         }
-//         printf("]\n");
-
-//         printf("Max Downstream Queue Lens at Tor %d:\n", i);
-//         for(int j = 0; j < NODES_PER_RACK; j++) {
-//             if (j != 0) {
-//                 printf(", ");
-//             }
-//             printf("%d", (int) tors[i]->downstream_queue_stat[j]->max_val);
-//         }
-//         printf("]\n\n");
-//     }
-// }
 
 void print_delay_stats(float avg_delay_at_spine, float avg_max_delay_at_spine, float timeslot_len)
 {
@@ -111,43 +63,3 @@ void write_to_outfile(FILE *fp, flow_t *flow, float timeslot_len, int bandwidth)
             flow_id, flow->flowType, src, dst, bytes_received, flow->timeslot, flow->notifTime, flow->grantTime, start_time, finish_time, flow_completion, slowdown, tput, pkts_dropped);
     fflush(fp);
 }
-
-// FILE * open_timeseries_outfile(char * filename) {
-//     char out_filename[520] = "out/";
-//     strncat(out_filename, filename, 500);
-//     FILE * timeslot_fp = fopen(out_filename, "w");
-//     assert(timeslot_fp != NULL);
-//     return timeslot_fp;
-// }
-
-// void write_to_timeseries_outfile(FILE * fp, spine_t * spines, tor_t * tors, int64_t final_timeslot, int64_t num_datapoints) {
-//     int ts_per_datapoint = final_timeslot / num_datapoints;
-//     if (ts_per_datapoint == 0) {
-//         ts_per_datapoint = 1;
-//     }
-
-//     for (int i = 0; i < final_timeslot; i += ts_per_datapoint) {
-//         for (int j = 0; j < NUM_OF_SPINES; j++) {
-//             spine_t spine = spines[j];
-//             for (int k = 0; k < SPINE_PORT_COUNT; k++) {
-//                 int len = (int) spine->queue_stat[k]->list[i];
-//                 fprintf(fp, "%d,", len);
-//             }
-//         }
-
-//         for (int j = 0; j < NUM_OF_TORS; j++) {
-//             tor_t tor = tors[j];
-//             for(int k = 0; k < NUM_OF_SPINES; k++) {
-//                 int len = (int) tor->upstream_queue_stat[k]->list[i];
-//                 fprintf(fp, "%d,", len);
-//             }
-
-//             for (int k = 0; k < NODES_PER_RACK; k++) {
-//                 int len = tor->downstream_queue_stat[k]->list[i];
-//                 fprintf(fp, "%d,", len);
-//             }
-//         }
-
-//         fprintf(fp, "\n");
-//     }
-// }

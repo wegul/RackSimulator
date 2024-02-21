@@ -26,6 +26,8 @@ struct packet
     int batchSrc[MAXBATCH];
     int batchDst[MAXBATCH];
 
+    int remain_size;
+
     int16_t src_node;
     int16_t dst_node;
     int64_t flow_id;
